@@ -1,13 +1,9 @@
 const MAX_GUESSES = 6;
-const STORAGE_PREFIX = "pop-quiz-v1";
+const STORAGE_PREFIX = "pop-quiz-v2";
 
 // The first game in games.json is played on this date.
 // Games then advance sequentially through the dataset and loop.
 const DAILY_EPOCH = "2026-10-06";
-
-// A simple, intentionally forgiving partial-match threshold.
-// Exact matches are always checked first.
-const PARTIAL_THRESHOLD = 0.60;
 
 const elements = {
   canvas: document.querySelector("#game-canvas"),
@@ -29,6 +25,9 @@ const elements = {
   help: document.querySelector("#help-button"),
   dialog: document.querySelector("#help-dialog"),
   helpClose: document.querySelector("#help-close"),
+  freePlay: document.querySelector("#free-play-button"),
+  modeLabel: document.querySelector("#mode-label"),
+  suggestions: document.querySelector("#guess-suggestions"),
 };
 
 const ctx = elements.canvas.getContext("2d");
@@ -39,6 +38,12 @@ let sourceImage = null;
 let guesses = [];
 let finished = false;
 let won = false;
+let mode = "daily";
+
+
+/* -------------------------------------------------------------------------- */
+/* Normalization                                                              */
+/* -------------------------------------------------------------------------- */
 
 function normalize(value) {
   return value
@@ -51,9 +56,20 @@ function normalize(value) {
     .replace(/\s+/g, " ");
 }
 
+function normalizedTokens(value) {
+  return normalize(value)
+    .split(" ")
+    .filter(Boolean);
+}
+
 function compactCharacters(value) {
   return normalize(value).replace(/ /g, "");
 }
+
+
+/* -------------------------------------------------------------------------- */
+/* Date / daily puzzle                                                        */
+/* -------------------------------------------------------------------------- */
 
 function localDateKey(date = new Date()) {
   const year = date.getFullYear();
@@ -80,13 +96,20 @@ function dailyIndex(dateKey, count) {
     dateKey,
   );
 
-  // JavaScript's % can return a negative number,
-  // so normalize it back into the valid array range.
   return ((daysSinceEpoch % count) + count) % count;
 }
 
+
+/* -------------------------------------------------------------------------- */
+/* State                                                                      */
+/* -------------------------------------------------------------------------- */
+
 function storageKey() {
-  return `${STORAGE_PREFIX}:${localDateKey()}`;
+  if (mode === "free") {
+    return `${STORAGE_PREFIX}:free`;
+  }
+
+  return `${STORAGE_PREFIX}:daily:${localDateKey()}`;
 }
 
 function saveState() {
@@ -94,13 +117,14 @@ function saveState() {
     localStorage.setItem(
       storageKey(),
       JSON.stringify({
+        puzzleId: puzzle?.id || null,
         guesses,
         finished,
         won,
       }),
     );
   } catch {
-    // Local storage is optional. The game should still work without it.
+    // Local storage is optional.
   }
 }
 
@@ -110,7 +134,17 @@ function loadState() {
       localStorage.getItem(storageKey()) || "null",
     );
 
-    if (!saved) return;
+    if (!saved) return false;
+
+    // Don't accidentally restore Free Play state against
+    // a different randomly selected puzzle.
+    if (
+      mode === "free" &&
+      saved.puzzleId &&
+      saved.puzzleId !== puzzle?.id
+    ) {
+      return false;
+    }
 
     guesses = Array.isArray(saved.guesses)
       ? saved.guesses
@@ -118,80 +152,250 @@ function loadState() {
 
     finished = Boolean(saved.finished);
     won = Boolean(saved.won);
+
+    return true;
   } catch {
-    // A corrupted local state should never prevent the game from loading.
+    return false;
   }
 }
+
+function clearCurrentState() {
+  guesses = [];
+  finished = false;
+  won = false;
+
+  try {
+    localStorage.removeItem(storageKey());
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+
+/* -------------------------------------------------------------------------- */
+/* Answer matching                                                            */
+/* -------------------------------------------------------------------------- */
 
 function answerNames(game) {
   return [
     game.name,
     ...(game.aliases || []),
     ...(game.accept || []),
-  ].map(normalize);
+  ]
+    .map(normalize)
+    .filter(Boolean);
 }
 
-function sharedCharacterRatio(first, second) {
-  const a = compactCharacters(first);
-  const b = compactCharacters(second);
+function hasMeaningfulWordOverlap(first, second) {
+  const firstTokens = normalizedTokens(first);
+  const secondTokens = normalizedTokens(second);
 
-  if (!a.length || !b.length) return 0;
-
-  // Count each character so repeated letters matter.
-  // Example: "Mario" and "Mario Kart" share all five
-  // characters from "Mario", making them a useful partial.
-  const counts = new Map();
-
-  for (const character of a) {
-    counts.set(
-      character,
-      (counts.get(character) || 0) + 1,
-    );
+  if (!firstTokens.length || !secondTokens.length) {
+    return false;
   }
 
-  let shared = 0;
+  const secondSet = new Set(secondTokens);
 
-  for (const character of b) {
-    const available = counts.get(character) || 0;
+  // Exact word overlap is particularly useful for:
+  //
+  //   Mario
+  //   Mario Kart
+  //
+  // and:
+  //
+  //   Call of Duty
+  //   Call of Duty Black Ops
+  //
+  const sharedWords = firstTokens.filter(
+    token => secondSet.has(token),
+  );
 
-    if (available > 0) {
-      shared += 1;
-      counts.set(character, available - 1);
+  if (!sharedWords.length) {
+    return false;
+  }
+
+  // Very short generic words such as "the", "of", etc. shouldn't
+  // independently trigger a partial.
+  const meaningful = sharedWords.filter(
+    token => token.length >= 3,
+  );
+
+  return meaningful.length > 0;
+}
+
+function hasStrongPrefixOverlap(first, second) {
+  const firstTokens = normalizedTokens(first);
+  const secondTokens = normalizedTokens(second);
+
+  if (!firstTokens.length || !secondTokens.length) {
+    return false;
+  }
+
+  const shorter = firstTokens.length <= secondTokens.length
+    ? firstTokens
+    : secondTokens;
+
+  const longer = firstTokens.length <= secondTokens.length
+    ? secondTokens
+    : firstTokens;
+
+  // A title beginning with the same meaningful words is a strong
+  // series/title relationship.
+  if (shorter.length > longer.length) {
+    return false;
+  }
+
+  for (let index = 0; index < shorter.length; index += 1) {
+    if (shorter[index] !== longer[index]) {
+      return false;
     }
   }
 
-  return shared / Math.min(a.length, b.length);
+  return shorter.some(token => token.length >= 4);
+}
+
+function levenshteinDistance(first, second) {
+  const a = compactCharacters(first);
+  const b = compactCharacters(second);
+
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+
+  const previous = Array.from(
+    { length: b.length + 1 },
+    (_, index) => index,
+  );
+
+  for (let i = 1; i <= a.length; i += 1) {
+    const current = [i];
+
+    for (let j = 1; j <= b.length; j += 1) {
+      const insertion = current[j - 1] + 1;
+      const deletion = previous[j] + 1;
+      const substitution =
+        previous[j - 1] +
+        (a[i - 1] === b[j - 1] ? 0 : 1);
+
+      current.push(
+        Math.min(
+          insertion,
+          deletion,
+          substitution,
+        ),
+      );
+    }
+
+    for (let j = 0; j < current.length; j += 1) {
+      previous[j] = current[j];
+    }
+  }
+
+  return previous[b.length];
+}
+
+function editSimilarity(first, second) {
+  const a = compactCharacters(first);
+  const b = compactCharacters(second);
+
+  if (!a.length || !b.length) {
+    return 0;
+  }
+
+  const distance = levenshteinDistance(a, b);
+  const longest = Math.max(a.length, b.length);
+
+  return 1 - distance / longest;
 }
 
 function isPartialMatch(guess, game) {
   const normalizedGuess = normalize(guess);
 
-  return answerNames(game).some(
-    answer =>
-      normalizedGuess !== answer &&
-      sharedCharacterRatio(
+  if (!normalizedGuess) {
+    return false;
+  }
+
+  return answerNames(game).some(answer => {
+    if (normalizedGuess === answer) {
+      return false;
+    }
+
+    const guessLength =
+      compactCharacters(normalizedGuess).length;
+
+    const answerLength =
+      compactCharacters(answer).length;
+
+    // Short answers need much stronger evidence.
+    //
+    // This is the important fix for:
+    //
+    //   Reel
+    //   Pokémon FireRed
+    //
+    // where four shared characters used to produce a false partial.
+    if (
+      Math.min(guessLength, answerLength) < 5
+    ) {
+      return (
+        hasMeaningfulWordOverlap(
+          normalizedGuess,
+          answer,
+        ) ||
+        hasStrongPrefixOverlap(
+          normalizedGuess,
+          answer,
+        )
+      );
+    }
+
+    if (
+      hasMeaningfulWordOverlap(
         normalizedGuess,
         answer,
-      ) >= PARTIAL_THRESHOLD,
-  );
+      )
+    ) {
+      return true;
+    }
+
+    if (
+      hasStrongPrefixOverlap(
+        normalizedGuess,
+        answer,
+      )
+    ) {
+      return true;
+    }
+
+    // Character-level similarity is now only a fallback.
+    // Require strong edit similarity and reasonably sized titles.
+    return (
+      Math.min(guessLength, answerLength) >= 6 &&
+      editSimilarity(
+        normalizedGuess,
+        answer,
+      ) >= 0.72
+    );
+  });
 }
 
 function guessStatus(value) {
   const normalized = normalize(value);
 
-  // Exact matches always win.
   if (answerNames(puzzle).includes(normalized)) {
     return "correct";
   }
 
-  // Partial matching is deliberately simple:
-  // 60%+ shared characters with an answer title.
   if (isPartialMatch(normalized, puzzle)) {
     return "partial";
   }
 
   return "wrong";
 }
+
+
+/* -------------------------------------------------------------------------- */
+/* Images                                                                     */
+/* -------------------------------------------------------------------------- */
 
 function selectedImage(game) {
   const usable = (game.images || []).filter(
@@ -200,8 +404,7 @@ function selectedImage(game) {
 
   if (!usable.length) return null;
 
-  // Use the first logical image for v1.
-  // The schema intentionally supports multiple images.
+  // First logical image for v1.
   return usable[0];
 }
 
@@ -258,7 +461,6 @@ function drawPixelated(forceClear = false) {
   let sw = sourceImage.naturalWidth;
   let sh = sourceImage.naturalHeight;
 
-  // Crop the source image to the same aspect ratio as the game frame.
   if (sourceRatio > targetRatio) {
     sw =
       sourceImage.naturalHeight *
@@ -277,7 +479,6 @@ function drawPixelated(forceClear = false) {
       2;
   }
 
-  // On a correct answer, reveal the actual image.
   if (forceClear) {
     ctx.imageSmoothingEnabled = true;
 
@@ -296,8 +497,6 @@ function drawPixelated(forceClear = false) {
     return;
   }
 
-  // The second value represents the number of pixels
-  // across the short dimension of the reduced image.
   const pixelSize =
     clarityForGuessCount(
       guesses.length,
@@ -329,8 +528,6 @@ function drawPixelated(forceClear = false) {
   const tempCtx =
     temp.getContext("2d");
 
-  // Smooth while reducing the image.
-  // Then disable smoothing when scaling it back up.
   tempCtx.imageSmoothingEnabled = true;
 
   tempCtx.drawImage(
@@ -360,27 +557,67 @@ function drawPixelated(forceClear = false) {
   );
 }
 
+
+/* -------------------------------------------------------------------------- */
+/* Guess UI                                                                   */
+/* -------------------------------------------------------------------------- */
+
 function statusLabel(status) {
   switch (status) {
     case "correct":
-      return "Correct";
+      return "🟩 Correct";
 
     case "partial":
-      return "Partial";
+      return "🟨 Close";
 
     default:
-      return "Wrong";
+      return "⬜ Wrong";
+  }
+}
+
+function statusDetail(status) {
+  switch (status) {
+    case "correct":
+      return "You found it.";
+
+    case "partial":
+      return "That looks like a related title.";
+
+    default:
+      return "Not this one.";
   }
 }
 
 function renderGuesses() {
   elements.guesses.innerHTML = "";
 
-  guesses.forEach((guess, index) => {
-    const status = guessStatus(guess);
+  for (
+    let index = 0;
+    index < MAX_GUESSES;
+    index += 1
+  ) {
+    const guess = guesses[index];
 
     const row =
       document.createElement("li");
+
+    if (!guess) {
+      row.className = "guess-row empty";
+
+      row.innerHTML = `
+        <span class="guess-name">—</span>
+        <span class="guess-status">Waiting</span>
+        <span class="attempt">
+          ${index + 1}/${MAX_GUESSES}
+        </span>
+      `;
+
+      elements.guesses.appendChild(row);
+      continue;
+    }
+
+    const status =
+      guessStatus(guess);
 
     row.className =
       `guess-row ${status}`;
@@ -391,6 +628,9 @@ function renderGuesses() {
       </span>
       <span class="guess-status">
         ${statusLabel(status)}
+        <small>
+          ${statusDetail(status)}
+        </small>
       </span>
       <span class="attempt">
         ${index + 1}/${MAX_GUESSES}
@@ -398,7 +638,7 @@ function renderGuesses() {
     `;
 
     elements.guesses.appendChild(row);
-  });
+  }
 
   elements.progress.textContent =
     finished
@@ -454,6 +694,11 @@ function flash(
   );
 }
 
+
+/* -------------------------------------------------------------------------- */
+/* Game completion                                                            */
+/* -------------------------------------------------------------------------- */
+
 function finishGame(success) {
   finished = true;
   won = success;
@@ -461,7 +706,6 @@ function finishGame(success) {
   elements.input.disabled = true;
   elements.button.disabled = true;
 
-  // A correct answer gets the full-resolution reveal.
   if (success) {
     drawPixelated(true);
   }
@@ -471,7 +715,9 @@ function finishGame(success) {
 
   if (success) {
     elements.resultKicker.textContent =
-      "Nice one";
+      mode === "free"
+        ? "Nice one"
+        : "Nice one";
 
     elements.resultTitle.textContent =
       puzzle.name;
@@ -484,26 +730,27 @@ function finishGame(success) {
           ? "guess"
           : "guesses"
       }.`;
-
-    setMessage("🟩 Correct!");
   } else {
     elements.resultKicker.textContent =
-      "Better luck tomorrow";
+      mode === "free"
+        ? "Try another"
+        : "Better luck tomorrow";
 
     elements.resultTitle.textContent =
       puzzle.name;
 
     elements.resultDetail.textContent =
       `The answer was ${puzzle.name}.`;
-
-    setMessage(
-      "⬜ No more guesses.",
-    );
   }
 
   saveState();
   renderGuesses();
 }
+
+
+/* -------------------------------------------------------------------------- */
+/* Guess submission                                                           */
+/* -------------------------------------------------------------------------- */
 
 function submitGuess(value) {
   const guess = value.trim();
@@ -540,14 +787,18 @@ function submitGuess(value) {
 
   elements.input.value = "";
 
-  // Every guess reveals a little more.
   drawPixelated();
   renderGuesses();
 
   const latestRow =
-    elements.guesses.lastElementChild;
+    elements.guesses[
+      guesses.length - 1
+    ];
 
-  flash(latestRow, "pop");
+  flash(
+    latestRow,
+    "pop",
+  );
 
   if (status === "correct") {
     finishGame(true);
@@ -573,6 +824,55 @@ function submitGuess(value) {
   elements.input.focus();
 }
 
+
+/* -------------------------------------------------------------------------- */
+/* Autocomplete                                                               */
+/* -------------------------------------------------------------------------- */
+
+function populateSuggestions() {
+  if (!elements.suggestions) return;
+
+  elements.suggestions.innerHTML = "";
+
+  const names = [
+    ...new Set(
+      games
+        .map(game => game.name)
+        .filter(Boolean),
+    ),
+  ];
+
+  names.forEach(name => {
+    const option =
+      document.createElement("option");
+
+    option.value = name;
+
+    elements.suggestions.appendChild(
+      option,
+    );
+  });
+}
+
+function updateAutocomplete() {
+  if (!elements.input) return;
+
+  const value =
+    elements.input.value.trim();
+
+  elements.input.setAttribute(
+    "list",
+    value.length >= 3
+      ? "guess-suggestions"
+      : "",
+  );
+}
+
+
+/* -------------------------------------------------------------------------- */
+/* Sharing                                                                    */
+/* -------------------------------------------------------------------------- */
+
 function shareResult() {
   const blocks =
     guesses
@@ -593,7 +893,11 @@ function shareResult() {
       .join("");
 
   const text =
-    `Pop Quiz ${localDateKey()}\n` +
+    `Pop Quiz ${
+      mode === "free"
+        ? "Free Play"
+        : localDateKey()
+    }\n` +
     `${blocks}\n` +
     `${
       won
@@ -625,6 +929,11 @@ function shareResult() {
     });
 }
 
+
+/* -------------------------------------------------------------------------- */
+/* Image loading                                                              */
+/* -------------------------------------------------------------------------- */
+
 function loadImage(path) {
   return new Promise(
     (resolve, reject) => {
@@ -647,6 +956,141 @@ function loadImage(path) {
     },
   );
 }
+
+
+/* -------------------------------------------------------------------------- */
+/* Puzzle selection                                                           */
+/* -------------------------------------------------------------------------- */
+
+function selectDailyPuzzle() {
+  const key =
+    localDateKey();
+
+  const index =
+    dailyIndex(
+      key,
+      games.length,
+    );
+
+  return games[index];
+}
+
+function selectFreePuzzle() {
+  if (!games.length) {
+    return null;
+  }
+
+  // Avoid immediately replaying the same game when possible.
+  const previousId =
+    puzzle?.id;
+
+  const candidates =
+    games.filter(
+      game =>
+        game.id !== previousId,
+    );
+
+  const pool =
+    candidates.length
+      ? candidates
+      : games;
+
+  const index =
+    Math.floor(
+      Math.random() * pool.length,
+    );
+
+  return pool[index];
+}
+
+
+/* -------------------------------------------------------------------------- */
+/* UI mode                                                                    */
+/* -------------------------------------------------------------------------- */
+
+function updateModeUI() {
+  if (elements.modeLabel) {
+    elements.modeLabel.textContent =
+      mode === "free"
+        ? "Free Play"
+        : "Today's Game";
+  }
+
+  if (elements.freePlay) {
+    elements.freePlay.textContent =
+      mode === "free"
+        ? "Another Game"
+        : "Free Play";
+  }
+
+  elements.date.textContent =
+    mode === "free"
+      ? "Random game"
+      : localDateKey();
+}
+
+
+/* -------------------------------------------------------------------------- */
+/* Start a puzzle                                                             */
+/* -------------------------------------------------------------------------- */
+
+async function startPuzzle(nextPuzzle, nextMode) {
+  if (!nextPuzzle) return;
+
+  mode = nextMode;
+  puzzle = nextPuzzle;
+  sourceImage = null;
+
+  guesses = [];
+  finished = false;
+  won = false;
+
+  elements.input.disabled = false;
+  elements.button.disabled = false;
+
+  elements.input.value = "";
+
+  elements.result.hidden = true;
+  elements.result.classList.remove("pop");
+
+  elements.placeholder.hidden = false;
+  elements.placeholder.textContent =
+    "Loading…";
+
+  updateModeUI();
+  renderGuesses();
+
+  const image =
+    selectedImage(puzzle);
+
+  if (!image) {
+    throw new Error(
+      "This game has no usable image.",
+    );
+  }
+
+  sourceImage =
+    await loadImage(
+      image.path,
+    );
+
+  elements.placeholder.hidden =
+    true;
+
+  drawPixelated();
+  renderGuesses();
+
+  setMessage(
+    "What game is this?",
+  );
+
+  elements.input.focus();
+}
+
+
+/* -------------------------------------------------------------------------- */
+/* Load daily game                                                            */
+/* -------------------------------------------------------------------------- */
 
 async function loadGame() {
   try {
@@ -682,25 +1126,11 @@ async function loadGame() {
       );
     }
 
-    const key =
-      localDateKey();
+    populateSuggestions();
 
-    // Deterministic sequential daily selection.
-    //
-    // With the current five-game dataset:
-    // Oct 6 -> game 1
-    // Oct 7 -> game 2
-    // Oct 8 -> game 3
-    // Oct 9 -> game 4
-    // Oct 10 -> game 5
-    // Oct 11 -> game 1 again
-    const index =
-      dailyIndex(
-        key,
-        games.length,
-      );
-
-    puzzle = games[index];
+    mode = "daily";
+    puzzle =
+      selectDailyPuzzle();
 
     const image =
       selectedImage(puzzle);
@@ -711,7 +1141,7 @@ async function loadGame() {
       );
     }
 
-    // Load saved state BEFORE rendering.
+    // Load saved daily state.
     loadState();
 
     sourceImage =
@@ -722,8 +1152,7 @@ async function loadGame() {
     elements.placeholder.hidden =
       true;
 
-    elements.date.textContent =
-      localDateKey();
+    updateModeUI();
 
     drawPixelated();
     renderGuesses();
@@ -751,8 +1180,6 @@ async function loadGame() {
             }.`
           : "Come back tomorrow for a new game.";
 
-      // If the player already solved today's puzzle,
-      // show the clear image again.
       if (won) {
         drawPixelated(true);
       }
@@ -782,6 +1209,11 @@ async function loadGame() {
   }
 }
 
+
+/* -------------------------------------------------------------------------- */
+/* Events                                                                     */
+/* -------------------------------------------------------------------------- */
+
 elements.form.addEventListener(
   "submit",
   event => {
@@ -791,6 +1223,11 @@ elements.form.addEventListener(
       elements.input.value,
     );
   },
+);
+
+elements.input.addEventListener(
+  "input",
+  updateAutocomplete,
 );
 
 elements.share.addEventListener(
@@ -822,13 +1259,50 @@ elements.dialog.addEventListener(
   },
 );
 
+if (elements.freePlay) {
+  elements.freePlay.addEventListener(
+    "click",
+    async () => {
+      try {
+        const nextPuzzle =
+          selectFreePuzzle();
+
+        if (!nextPuzzle) return;
+
+        await startPuzzle(
+          nextPuzzle,
+          "free",
+        );
+      } catch (error) {
+        console.error(
+          "Could not start free play:",
+          error,
+        );
+
+        setMessage(
+          "Couldn't start another game.",
+          true,
+        );
+      }
+    },
+  );
+}
+
 window.addEventListener(
   "resize",
   () => {
     window.requestAnimationFrame(
-      () => drawPixelated(finished && won),
+      () =>
+        drawPixelated(
+          finished && won,
+        ),
     );
   },
 );
+
+
+/* -------------------------------------------------------------------------- */
+/* Boot                                                                       */
+/* -------------------------------------------------------------------------- */
 
 loadGame();
