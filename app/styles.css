@@ -8,13 +8,18 @@
   --accent-dark: #24553f;
   --wrong: #b75c4d;
   --success: #2e6b4e;
+  --partial: #9a741c;
   --shadow: 0 12px 35px rgba(35, 31, 25, 0.08);
   --radius: 18px;
 }
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
-html { min-height: 100%; }
+html {
+  min-height: 100%;
+}
 
 body {
   margin: 0;
@@ -27,11 +32,17 @@ body {
 }
 
 button,
-input { font: inherit; }
+input {
+  font: inherit;
+}
 
-button { cursor: pointer; }
+button {
+  cursor: pointer;
+}
 
-a { color: inherit; }
+a {
+  color: inherit;
+}
 
 .game-shell {
   width: min(100% - 28px, 760px);
@@ -75,7 +86,9 @@ h1 {
 }
 
 .icon-button:hover,
-.dialog-close:hover { color: var(--text); }
+.dialog-close:hover {
+  color: var(--text);
+}
 
 .game-card {
   padding: clamp(12px, 2.5vw, 20px);
@@ -142,7 +155,9 @@ h1 {
   box-shadow: 0 0 0 3px rgba(46, 107, 78, 0.12);
 }
 
-.guess-form input:disabled { background: #f0eee9; }
+.guess-form input:disabled {
+  background: #f0eee9;
+}
 
 .guess-form button,
 .secondary-button {
@@ -156,9 +171,14 @@ h1 {
 }
 
 .guess-form button:hover,
-.secondary-button:hover { background: var(--accent-dark); }
+.secondary-button:hover {
+  background: var(--accent-dark);
+}
 
-.guess-form button:disabled { opacity: 0.5; cursor: default; }
+.guess-form button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 
 .message {
   min-height: 24px;
@@ -167,7 +187,9 @@ h1 {
   font-size: 0.85rem;
 }
 
-.message.error { color: var(--wrong); }
+.message.error {
+  color: var(--wrong);
+}
 
 .guesses {
   display: grid;
@@ -178,9 +200,10 @@ h1 {
 }
 
 .guess-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
   align-items: center;
-  justify-content: space-between;
+  gap: 10px;
   min-height: 40px;
   padding: 0 12px;
   border-radius: 9px;
@@ -188,7 +211,47 @@ h1 {
   font-size: 0.88rem;
 }
 
-.guess-row.wrong { color: #55514b; }
+.guess-row.wrong {
+  color: #55514b;
+}
+
+.guess-row.partial {
+  background: #f3ead0;
+  color: #604d1d;
+}
+
+.guess-row.correct {
+  background: #dcecdf;
+  color: #24553f;
+}
+
+.guess-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.guess-status {
+  min-width: 58px;
+  text-align: center;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.guess-row.wrong .guess-status {
+  color: var(--wrong);
+}
+
+.guess-row.partial .guess-status {
+  color: var(--partial);
+}
+
+.guess-row.correct .guess-status {
+  color: var(--success);
+}
 
 .guess-row .attempt {
   color: var(--muted);
@@ -245,7 +308,9 @@ h1 {
   font-size: 0.72rem;
 }
 
-.game-footer a:hover { color: var(--text); }
+.game-footer a:hover {
+  color: var(--text);
+}
 
 dialog {
   width: min(92vw, 430px);
@@ -297,19 +362,39 @@ dialog::backdrop {
   border: 0;
 }
 
-.shake { animation: shake 260ms ease-in-out; }
+.shake {
+  animation: shake 260ms ease-in-out;
+}
 
-.pop { animation: pop 220ms ease-out; }
+.pop {
+  animation: pop 220ms ease-out;
+}
 
 @keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-5px); }
-  75% { transform: translateX(5px); }
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  25% {
+    transform: translateX(-5px);
+  }
+
+  75% {
+    transform: translateX(5px);
+  }
 }
 
 @keyframes pop {
-  0% { transform: scale(0.98); opacity: 0.4; }
-  100% { transform: scale(1); opacity: 1; }
+  0% {
+    transform: scale(0.98);
+    opacity: 0.4;
+  }
+
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 @media (max-width: 520px) {
@@ -318,7 +403,9 @@ dialog::backdrop {
     padding-top: 10px;
   }
 
-  .game-header { padding-bottom: 12px; }
+  .game-header {
+    padding-bottom: 12px;
+  }
 
   .game-card {
     padding: 10px;
@@ -336,6 +423,20 @@ dialog::backdrop {
 
   .guess-form button {
     width: 100%;
+  }
+
+  .guess-row {
+    grid-template-columns: 1fr auto;
+    gap: 6px;
+    padding: 0 10px;
+  }
+
+  .guess-status {
+    min-width: auto;
+  }
+
+  .guess-row .attempt {
+    display: none;
   }
 
   .game-footer {
