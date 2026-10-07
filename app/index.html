@@ -21,7 +21,7 @@
   <title>Pop Quiz — Video Game Guessing Game</title>
 
   <!-- Bump this version whenever CSS/JS changes during development. -->
-  <link rel="stylesheet" href="styles.css?v=5">
+  <link rel="stylesheet" href="styles.css?v=6">
 </head>
 
 <body>
@@ -33,14 +33,30 @@
         <h1>Pop Quiz</h1>
       </div>
 
-      <button
-        class="icon-button"
-        id="help-button"
-        type="button"
-        aria-label="How to play"
+      <div
+        class="header-actions"
+        aria-label="Game information"
       >
-        ?
-      </button>
+        <button
+          class="icon-button"
+          id="help-button"
+          type="button"
+          aria-label="How to play"
+          title="How to play"
+        >
+          ?
+        </button>
+
+        <button
+          class="icon-button report-icon-button"
+          id="report-button"
+          type="button"
+          aria-label="Report a puzzle issue"
+          title="Report a puzzle issue"
+        >
+          !
+        </button>
+      </div>
     </header>
 
     <nav
@@ -202,6 +218,10 @@
 
   </main>
 
+  <!-- --------------------------------------------------------------------- -->
+  <!-- How to play                                                           -->
+  <!-- --------------------------------------------------------------------- -->
+
   <dialog id="help-dialog">
     <div class="dialog-inner">
 
@@ -254,7 +274,64 @@
     </div>
   </dialog>
 
+  <!-- --------------------------------------------------------------------- -->
+  <!-- Report puzzle                                                         -->
+  <!-- --------------------------------------------------------------------- -->
+
+  <dialog id="report-dialog">
+    <div class="dialog-inner">
+
+      <button
+        class="dialog-close"
+        id="report-close"
+        type="button"
+        aria-label="Close"
+      >
+        ×
+      </button>
+
+      <p class="eyebrow">
+        Report a problem
+      </p>
+
+      <h2>
+        Something wrong with this puzzle?
+      </h2>
+
+      <p>
+        Let us know if the image is broken, belongs to a different game,
+        or there is another problem with this puzzle.
+      </p>
+
+      <div class="report-puzzle-id">
+        <span class="report-puzzle-id-label">
+          Puzzle ID
+        </span>
+
+        <code id="report-puzzle-id">
+          —
+        </code>
+      </div>
+
+      <p class="dialog-small">
+        This ID helps us find the exact source record. It does not reveal
+        the answer to the puzzle.
+      </p>
+
+      <a
+        class="report-link"
+        id="report-issue-link"
+        href="https://github.com/sedward5/soda-guesser/issues/new"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        Open issue creator
+      </a>
+
+    </div>
+  </dialog>
+
   <!-- Bump this version whenever JS changes during development. -->
-  <script src="game.js?v=5"></script>
+  <script src="game.js?v=6"></script>
 </body>
 </html>
