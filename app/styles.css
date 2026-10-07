@@ -617,6 +617,116 @@ dialog::backdrop {
   background: var(--accent-dark);
 }
 
+/* -------------------------------------------------------------------------- */
+/* Statistics                                                                 */
+/* -------------------------------------------------------------------------- */
+
+.stats-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin: 18px 0 24px;
+}
+
+.stats-stat {
+  padding: 10px 6px;
+  border-radius: 10px;
+  background: #f3f1ec;
+  text-align: center;
+}
+
+.stats-stat strong {
+  display: block;
+  color: var(--text);
+  font-size: 1.25rem;
+  line-height: 1.1;
+}
+
+.stats-stat span {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.stats-distribution {
+  display: grid;
+  gap: 6px;
+}
+
+.stats-distribution h3 {
+  margin: 0 0 5px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.stats-distribution-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  min-height: 22px;
+}
+
+.stats-distribution-number {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 750;
+  text-align: right;
+}
+
+.stats-bar-track {
+  position: relative;
+  height: 20px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #f0eee9;
+}
+
+.stats-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  height: 100%;
+  padding: 0 7px;
+  border-radius: 4px;
+  background: var(--accent);
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 800;
+  line-height: 1;
+  transition: width 250ms ease;
+}
+
+.stats-bar span {
+  white-space: nowrap;
+}
+
+@media (max-width: 520px) {
+  .stats-summary {
+    gap: 5px;
+  }
+
+  .stats-stat {
+    padding: 9px 3px;
+  }
+
+  .stats-stat strong {
+    font-size: 1.1rem;
+  }
+
+  .stats-stat span {
+    font-size: 0.56rem;
+  }
+}
+
 
 /* -------------------------------------------------------------------------- */
 /* Accessibility                                                              */
