@@ -1,4 +1,4 @@
-name: Deploy VGSM Guess
+name: Deploy Pop Quiz
 
 on:
   push:
@@ -34,6 +34,9 @@ jobs:
         run: |
           mkdir -p _site
           cp -R app/. _site/
+
+          mkdir -p _site/assets/images
+          cp -R assets/images/. _site/assets/images/
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
