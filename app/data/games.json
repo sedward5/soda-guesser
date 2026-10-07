@@ -1,0 +1,166 @@
+{
+  "schema_version": 1,
+  "source": {
+    "name": "Video Game Soda Machine Project",
+    "url": "https://vgsmproject.com"
+  },
+  "games": [
+    {
+      "id": "wp-9194",
+      "name": "Hallowed Candy",
+      "normalized_name": "hallowed candy",
+      "aliases": [],
+      "series": null,
+      "accept": [
+        "hallowed candy"
+      ],
+      "partial": [],
+      "article": "https://vgsmproject.com/2018/10/28/hallowed-candy/",
+      "source": {
+        "site": "vgsm",
+        "url": "https://vgsmproject.com/2018/10/28/hallowed-candy/",
+        "post_id": 9194,
+        "date": "2018-10-28T20:58:53"
+      },
+      "categories": [
+        1263
+      ],
+      "tags": [],
+      "images": [
+        {
+          "source_url": "https://vgsmproject.com/wp-content/uploads/2018/10/hallowed-candy.png",
+          "path": "/assets/images/wp-9194-1.png",
+          "alt": "",
+          "width": 965,
+          "height": 768
+        }
+      ]
+    },
+    {
+      "id": "wp-3795",
+      "name": "Prank TV",
+      "normalized_name": "prank tv",
+      "aliases": [],
+      "series": null,
+      "accept": [
+        "prank tv"
+      ],
+      "partial": [],
+      "article": "https://vgsmproject.com/2017/07/02/prank-tv/",
+      "source": {
+        "site": "vgsm",
+        "url": "https://vgsmproject.com/2017/07/02/prank-tv/",
+        "post_id": 3795,
+        "date": "2017-07-02T09:29:32"
+      },
+      "categories": [
+        613
+      ],
+      "tags": [],
+      "images": [
+        {
+          "source_url": "https://vgsmproject.com/wp-content/uploads/2017/07/prank_tv.jpg",
+          "path": "/assets/images/wp-3795-1.jpg",
+          "alt": "",
+          "width": 1024,
+          "height": 819
+        }
+      ]
+    },
+    {
+      "id": "wp-10648",
+      "name": "Zoku Hatsukoi Monogatari: Shūgaku Ryokō",
+      "normalized_name": "zoku hatsukoi monogatari shugaku ryoko",
+      "aliases": [],
+      "series": null,
+      "accept": [
+        "zoku hatsukoi monogatari shugaku ryoko"
+      ],
+      "partial": [],
+      "article": "https://vgsmproject.com/2018/04/08/zoku-hatsukoi-monogatari-shugaku-ryoko/",
+      "source": {
+        "site": "vgsm",
+        "url": "https://vgsmproject.com/2018/04/08/zoku-hatsukoi-monogatari-shugaku-ryoko/",
+        "post_id": 10648,
+        "date": "2018-04-08T10:51:02"
+      },
+      "categories": [
+        1464
+      ],
+      "tags": [],
+      "images": [
+        {
+          "source_url": "https://vgsmproject.com/wp-content/uploads/2019/04/zuko.jpg",
+          "path": "/assets/images/wp-10648-1.jpg",
+          "alt": "Zoku Hatsukoi Monogatari: Shūgaku Ryokō ",
+          "width": 787,
+          "height": 689
+        }
+      ]
+    },
+    {
+      "id": "wp-9529",
+      "name": "The Last of Us",
+      "normalized_name": "the last of us",
+      "aliases": [],
+      "series": null,
+      "accept": [
+        "the last of us"
+      ],
+      "partial": [],
+      "article": "https://vgsmproject.com/2019/01/03/the-last-of-us-3/",
+      "source": {
+        "site": "vgsm",
+        "url": "https://vgsmproject.com/2019/01/03/the-last-of-us-3/",
+        "post_id": 9529,
+        "date": "2019-01-03T16:49:26"
+      },
+      "categories": [
+        214
+      ],
+      "tags": [],
+      "images": [
+        {
+          "source_url": "https://vgsmproject.com/wp-content/uploads/2019/01/lastofus.jpg",
+          "path": "/assets/images/wp-9529-1.jpg",
+          "alt": "",
+          "width": 1920,
+          "height": 1080
+        }
+      ]
+    },
+    {
+      "id": "wp-4781",
+      "name": "The Sims",
+      "normalized_name": "the sims",
+      "aliases": [],
+      "series": null,
+      "accept": [
+        "the sims"
+      ],
+      "partial": [],
+      "article": "https://vgsmproject.com/2017/10/03/the-sims-3/",
+      "source": {
+        "site": "vgsm",
+        "url": "https://vgsmproject.com/2017/10/03/the-sims-3/",
+        "post_id": 4781,
+        "date": "2017-10-03T17:03:17"
+      },
+      "categories": [
+        27
+      ],
+      "tags": [
+        725
+      ],
+      "images": [
+        {
+          "source_url": "https://vgsmproject.com/wp-content/uploads/2017/10/thesims_pepsi.jpg",
+          "path": "/assets/images/wp-4781-1.jpg",
+          "alt": "",
+          "width": 1024,
+          "height": 768
+        }
+      ]
+    }
+  ]
+}

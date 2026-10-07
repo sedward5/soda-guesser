@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "source": "https://vgsmproject.com",
+  "discovered_posts": 2376,
+  "usable_posts": 2375,
+  "requested_samples": 5,
+  "successful_games": 5,
+  "skipped_posts_without_images": 1,
+  "warnings": []
+}
