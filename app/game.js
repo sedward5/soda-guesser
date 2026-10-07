@@ -1,6 +1,14 @@
 const MAX_GUESSES = 6;
 const STORAGE_PREFIX = "pop-quiz-v1";
 
+// The first game in games.json is played on this date.
+// Games then advance sequentially through the dataset and loop.
+const DAILY_EPOCH = "2026-10-06";
+
+// A simple, intentionally forgiving partial-match threshold.
+// Exact matches are always checked first.
+const PARTIAL_THRESHOLD = 0.60;
+
 const elements = {
   canvas: document.querySelector("#game-canvas"),
   imageFrame: document.querySelector("#image-frame"),
@@ -43,6 +51,10 @@ function normalize(value) {
     .replace(/\s+/g, " ");
 }
 
+function compactCharacters(value) {
+  return normalize(value).replace(/ /g, "");
+}
+
 function localDateKey(date = new Date()) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -51,21 +63,26 @@ function localDateKey(date = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
-function seededIndex(seed, count) {
-  let hash = 2166136261;
+function dateDifferenceInDays(fromDate, toDate) {
+  const from = new Date(`${fromDate}T00:00:00`);
+  const to = new Date(`${toDate}T00:00:00`);
 
-  for (const char of seed) {
-    hash ^= char.charCodeAt(0);
-    hash = Math.imul(hash, 16777619);
-  }
+  return Math.floor(
+    (to - from) / (1000 * 60 * 60 * 24),
+  );
+}
 
-  hash += hash << 13;
-  hash ^= hash >>> 7;
-  hash += hash << 3;
-  hash ^= hash >>> 17;
-  hash += hash << 5;
+function dailyIndex(dateKey, count) {
+  if (!count) return 0;
 
-  return Math.abs(hash) % count;
+  const daysSinceEpoch = dateDifferenceInDays(
+    DAILY_EPOCH,
+    dateKey,
+  );
+
+  // JavaScript's % can return a negative number,
+  // so normalize it back into the valid array range.
+  return ((daysSinceEpoch % count) + count) % count;
 }
 
 function storageKey() {
@@ -114,20 +131,62 @@ function answerNames(game) {
   ].map(normalize);
 }
 
-function partialNames(game) {
-  return [
-    ...(game.partial || []),
-  ].map(normalize);
+function sharedCharacterRatio(first, second) {
+  const a = compactCharacters(first);
+  const b = compactCharacters(second);
+
+  if (!a.length || !b.length) return 0;
+
+  // Count each character so repeated letters matter.
+  // Example: "Mario" and "Mario Kart" share all five
+  // characters from "Mario", making them a useful partial.
+  const counts = new Map();
+
+  for (const character of a) {
+    counts.set(
+      character,
+      (counts.get(character) || 0) + 1,
+    );
+  }
+
+  let shared = 0;
+
+  for (const character of b) {
+    const available = counts.get(character) || 0;
+
+    if (available > 0) {
+      shared += 1;
+      counts.set(character, available - 1);
+    }
+  }
+
+  return shared / Math.min(a.length, b.length);
+}
+
+function isPartialMatch(guess, game) {
+  const normalizedGuess = normalize(guess);
+
+  return answerNames(game).some(
+    answer =>
+      normalizedGuess !== answer &&
+      sharedCharacterRatio(
+        normalizedGuess,
+        answer,
+      ) >= PARTIAL_THRESHOLD,
+  );
 }
 
 function guessStatus(value) {
   const normalized = normalize(value);
 
+  // Exact matches always win.
   if (answerNames(puzzle).includes(normalized)) {
     return "correct";
   }
 
-  if (partialNames(puzzle).includes(normalized)) {
+  // Partial matching is deliberately simple:
+  // 60%+ shared characters with an answer title.
+  if (isPartialMatch(normalized, puzzle)) {
     return "partial";
   }
 
@@ -148,12 +207,12 @@ function selectedImage(game) {
 
 function clarityForGuessCount(count) {
   const levels = [
-    ["Very pixelated", 10],
-    ["Pretty pixelated", 18],
-    ["Starting to clear", 28],
-    ["Getting clearer", 42],
-    ["Almost there", 62],
-    ["Clear", 100],
+    ["Very pixelated", 12],
+    ["Heavily pixelated", 20],
+    ["Pixelated", 32],
+    ["Getting recognizable", 48],
+    ["Mostly clear", 80],
+    ["Clear", 160],
   ];
 
   return levels[
@@ -161,7 +220,7 @@ function clarityForGuessCount(count) {
   ];
 }
 
-function drawPixelated() {
+function drawPixelated(forceClear = false) {
   if (!sourceImage) return;
 
   const width =
@@ -181,8 +240,6 @@ function drawPixelated() {
   elements.canvas.height =
     Math.round(height * dpr);
 
-  ctx.imageSmoothingEnabled = false;
-
   ctx.clearRect(
     0,
     0,
@@ -190,53 +247,78 @@ function drawPixelated() {
     elements.canvas.height,
   );
 
+  const targetRatio = width / height;
+
   const sourceRatio =
     sourceImage.naturalWidth /
     sourceImage.naturalHeight;
 
-  const targetRatio =
-    width / height;
+  let sx = 0;
+  let sy = 0;
+  let sw = sourceImage.naturalWidth;
+  let sh = sourceImage.naturalHeight;
 
-  let drawWidth = width;
-  let drawHeight = height;
-
+  // Crop the source image to the same aspect ratio as the game frame.
   if (sourceRatio > targetRatio) {
-    drawHeight = height;
-    drawWidth = height * sourceRatio;
+    sw =
+      sourceImage.naturalHeight *
+      targetRatio;
+
+    sx =
+      (sourceImage.naturalWidth - sw) /
+      2;
   } else {
-    drawWidth = width;
-    drawHeight = width / sourceRatio;
+    sh =
+      sourceImage.naturalWidth /
+      targetRatio;
+
+    sy =
+      (sourceImage.naturalHeight - sh) /
+      2;
   }
 
-  const revealPercent =
+  // On a correct answer, reveal the actual image.
+  if (forceClear) {
+    ctx.imageSmoothingEnabled = true;
+
+    ctx.drawImage(
+      sourceImage,
+      sx,
+      sy,
+      sw,
+      sh,
+      0,
+      0,
+      elements.canvas.width,
+      elements.canvas.height,
+    );
+
+    return;
+  }
+
+  // The second value represents the number of pixels
+  // across the short dimension of the reduced image.
+  const pixelSize =
     clarityForGuessCount(
       guesses.length,
     )[1];
 
-  const minDimension =
-    Math.min(drawWidth, drawHeight);
+  let smallWidth;
+  let smallHeight;
 
-  const blocks = Math.max(
-    10,
-    Math.round(
-      10 +
-        (minDimension *
-          revealPercent) /
-          100,
-    ),
-  );
-
-  const smallWidth = Math.max(
-    8,
-    Math.round(
-      blocks * sourceRatio,
-    ),
-  );
-
-  const smallHeight = Math.max(
-    8,
-    Math.round(blocks),
-  );
+  if (targetRatio >= 1) {
+    smallHeight = pixelSize;
+    smallWidth = Math.max(
+      8,
+      Math.round(pixelSize * targetRatio),
+    );
+  } else {
+    smallWidth = pixelSize;
+    smallHeight = Math.max(
+      8,
+      Math.round(pixelSize / targetRatio),
+    );
+  }
 
   const temp =
     document.createElement("canvas");
@@ -247,37 +329,9 @@ function drawPixelated() {
   const tempCtx =
     temp.getContext("2d");
 
-  tempCtx.imageSmoothingEnabled =
-    true;
-
-  const cropRatio =
-    sourceImage.naturalWidth /
-    sourceImage.naturalHeight;
-
-  let sx = 0;
-  let sy = 0;
-  let sw = sourceImage.naturalWidth;
-  let sh = sourceImage.naturalHeight;
-
-  if (cropRatio > targetRatio) {
-    sw =
-      sourceImage.naturalHeight *
-      targetRatio;
-
-    sx =
-      (sourceImage.naturalWidth -
-        sw) /
-      2;
-  } else {
-    sh =
-      sourceImage.naturalWidth /
-      targetRatio;
-
-    sy =
-      (sourceImage.naturalHeight -
-        sh) /
-      2;
-  }
+  // Smooth while reducing the image.
+  // Then disable smoothing when scaling it back up.
+  tempCtx.imageSmoothingEnabled = true;
 
   tempCtx.drawImage(
     sourceImage,
@@ -291,13 +345,7 @@ function drawPixelated() {
     smallHeight,
   );
 
-  const scaleX =
-    elements.canvas.width /
-    smallWidth;
-
-  const scaleY =
-    elements.canvas.height /
-    smallHeight;
+  ctx.imageSmoothingEnabled = false;
 
   ctx.drawImage(
     temp,
@@ -307,8 +355,8 @@ function drawPixelated() {
     smallHeight,
     0,
     0,
-    smallWidth * scaleX,
-    smallHeight * scaleY,
+    elements.canvas.width,
+    elements.canvas.height,
   );
 }
 
@@ -413,6 +461,11 @@ function finishGame(success) {
   elements.input.disabled = true;
   elements.button.disabled = true;
 
+  // A correct answer gets the full-resolution reveal.
+  if (success) {
+    drawPixelated(true);
+  }
+
   elements.result.hidden = false;
   elements.result.classList.add("pop");
 
@@ -487,8 +540,7 @@ function submitGuess(value) {
 
   elements.input.value = "";
 
-  // Update the image and feedback together so
-  // the player gets an immediate result.
+  // Every guess reveals a little more.
   drawPixelated();
   renderGuesses();
 
@@ -502,6 +554,11 @@ function submitGuess(value) {
     return;
   }
 
+  if (guesses.length >= MAX_GUESSES) {
+    finishGame(false);
+    return;
+  }
+
   if (status === "partial") {
     setMessage(
       "🟨 Close! You're in the right neighborhood.",
@@ -510,11 +567,6 @@ function submitGuess(value) {
     setMessage(
       "⬜ Nope. The picture just got a little clearer.",
     );
-  }
-
-  if (guesses.length >= MAX_GUESSES) {
-    finishGame(false);
-    return;
   }
 
   saveState();
@@ -633,13 +685,22 @@ async function loadGame() {
     const key =
       localDateKey();
 
-    puzzle =
-      games[
-        seededIndex(
-          key,
-          games.length,
-        )
-      ];
+    // Deterministic sequential daily selection.
+    //
+    // With the current five-game dataset:
+    // Oct 6 -> game 1
+    // Oct 7 -> game 2
+    // Oct 8 -> game 3
+    // Oct 9 -> game 4
+    // Oct 10 -> game 5
+    // Oct 11 -> game 1 again
+    const index =
+      dailyIndex(
+        key,
+        games.length,
+      );
+
+    puzzle = games[index];
 
     const image =
       selectedImage(puzzle);
@@ -689,6 +750,12 @@ async function loadGame() {
                 : "guesses"
             }.`
           : "Come back tomorrow for a new game.";
+
+      // If the player already solved today's puzzle,
+      // show the clear image again.
+      if (won) {
+        drawPixelated(true);
+      }
     } else {
       setMessage(
         "What game is this?",
@@ -759,7 +826,7 @@ window.addEventListener(
   "resize",
   () => {
     window.requestAnimationFrame(
-      drawPixelated,
+      () => drawPixelated(finished && won),
     );
   },
 );
