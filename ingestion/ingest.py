@@ -571,7 +571,7 @@ def download_image(
         )
 
     return (
-        f"/assets/images/"
+        f"assets/images/"
         f"{filename}"
     )
 
