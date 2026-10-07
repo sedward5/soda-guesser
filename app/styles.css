@@ -241,7 +241,13 @@ h1 {
   background: #f0eee9;
 }
 
-.guess-form button,
+/*
+ * Only style the actual Guess submit button.
+ *
+ * The autocomplete buttons live inside .guess-input-wrap, so using
+ * ".guess-form button" here would also style every suggestion button.
+ */
+.guess-form > button,
 .secondary-button {
   min-height: 50px;
   padding: 0 20px;
@@ -252,12 +258,12 @@ h1 {
   font-weight: 750;
 }
 
-.guess-form button:hover,
+.guess-form > button:hover,
 .secondary-button:hover {
   background: var(--accent-dark);
 }
 
-.guess-form button:disabled {
+.guess-form > button:disabled {
   opacity: 0.5;
   cursor: default;
 }
@@ -337,6 +343,7 @@ h1 {
     min-height: 44px;
   }
 }
+
 
 /* -------------------------------------------------------------------------- */
 /* Message                                                                    */
@@ -700,7 +707,7 @@ dialog::backdrop {
     grid-template-columns: 1fr;
   }
 
-  .guess-form button {
+  .guess-form > button {
     width: 100%;
   }
 
