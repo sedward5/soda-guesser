@@ -5,6 +5,9 @@ const STORAGE_PREFIX = "pop-quiz-v2";
 // Games then advance sequentially through the dataset and loop.
 const DAILY_EPOCH = "2026-10-06";
 
+const GITHUB_ISSUE_URL =
+  "https://github.com/sedward5/soda-guesser/issues/new";
+
 const elements = {
   canvas: document.querySelector("#game-canvas"),
   imageFrame: document.querySelector("#image-frame"),
@@ -22,15 +25,25 @@ const elements = {
   resultDetail: document.querySelector("#result-detail"),
   share: document.querySelector("#share-button"),
   date: document.querySelector("#date-label"),
+
   help: document.querySelector("#help-button"),
   dialog: document.querySelector("#help-dialog"),
   helpClose: document.querySelector("#help-close"),
+
+  report: document.querySelector("#report-button"),
+  reportDialog: document.querySelector("#report-dialog"),
+  reportClose: document.querySelector("#report-close"),
+  reportPuzzleId: document.querySelector("#report-puzzle-id"),
+  reportIssueLink: document.querySelector("#report-issue-link"),
+
   freePlay: document.querySelector("#free-play-button"),
   modeLabel: document.querySelector("#mode-label"),
+
   suggestions: document.querySelector("#guess-suggestions"),
 };
 
-const ctx = elements.canvas.getContext("2d");
+const ctx =
+  elements.canvas.getContext("2d");
 
 let games = [];
 let puzzle = null;
@@ -72,31 +85,52 @@ function compactCharacters(value) {
 /* -------------------------------------------------------------------------- */
 
 function localDateKey(date = new Date()) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
+  const year =
+    date.getFullYear();
+
+  const month =
+    String(date.getMonth() + 1)
+      .padStart(2, "0");
+
+  const day =
+    String(date.getDate())
+      .padStart(2, "0");
 
   return `${year}-${month}-${day}`;
 }
 
-function dateDifferenceInDays(fromDate, toDate) {
-  const from = new Date(`${fromDate}T00:00:00`);
-  const to = new Date(`${toDate}T00:00:00`);
+function dateDifferenceInDays(
+  fromDate,
+  toDate,
+) {
+  const from =
+    new Date(`${fromDate}T00:00:00`);
+
+  const to =
+    new Date(`${toDate}T00:00:00`);
 
   return Math.floor(
-    (to - from) / (1000 * 60 * 60 * 24),
+    (to - from) /
+      (1000 * 60 * 60 * 24),
   );
 }
 
-function dailyIndex(dateKey, count) {
+function dailyIndex(
+  dateKey,
+  count,
+) {
   if (!count) return 0;
 
-  const daysSinceEpoch = dateDifferenceInDays(
-    DAILY_EPOCH,
-    dateKey,
-  );
+  const daysSinceEpoch =
+    dateDifferenceInDays(
+      DAILY_EPOCH,
+      dateKey,
+    );
 
-  return ((daysSinceEpoch % count) + count) % count;
+  return (
+    (daysSinceEpoch % count) +
+    count
+  ) % count;
 }
 
 
@@ -109,7 +143,10 @@ function storageKey() {
     return `${STORAGE_PREFIX}:free`;
   }
 
-  return `${STORAGE_PREFIX}:daily:${localDateKey()}`;
+  return (
+    `${STORAGE_PREFIX}:daily:` +
+    localDateKey()
+  );
 }
 
 function saveState() {
@@ -117,7 +154,8 @@ function saveState() {
     localStorage.setItem(
       storageKey(),
       JSON.stringify({
-        puzzleId: puzzle?.id || null,
+        puzzleId:
+          puzzle?.id || null,
         guesses,
         finished,
         won,
@@ -130,9 +168,12 @@ function saveState() {
 
 function loadState() {
   try {
-    const saved = JSON.parse(
-      localStorage.getItem(storageKey()) || "null",
-    );
+    const saved =
+      JSON.parse(
+        localStorage.getItem(
+          storageKey(),
+        ) || "null",
+      );
 
     if (!saved) return false;
 
@@ -146,12 +187,16 @@ function loadState() {
       return false;
     }
 
-    guesses = Array.isArray(saved.guesses)
-      ? saved.guesses
-      : [];
+    guesses =
+      Array.isArray(saved.guesses)
+        ? saved.guesses
+        : [];
 
-    finished = Boolean(saved.finished);
-    won = Boolean(saved.won);
+    finished =
+      Boolean(saved.finished);
+
+    won =
+      Boolean(saved.won);
 
     return true;
   } catch {
@@ -165,7 +210,9 @@ function clearCurrentState() {
   won = false;
 
   try {
-    localStorage.removeItem(storageKey());
+    localStorage.removeItem(
+      storageKey(),
+    );
   } catch {
     // Ignore storage failures.
   }
@@ -186,95 +233,145 @@ function answerNames(game) {
     .filter(Boolean);
 }
 
-function hasMeaningfulWordOverlap(first, second) {
-  const firstTokens = normalizedTokens(first);
-  const secondTokens = normalizedTokens(second);
+function hasMeaningfulWordOverlap(
+  first,
+  second,
+) {
+  const firstTokens =
+    normalizedTokens(first);
 
-  if (!firstTokens.length || !secondTokens.length) {
+  const secondTokens =
+    normalizedTokens(second);
+
+  if (
+    !firstTokens.length ||
+    !secondTokens.length
+  ) {
     return false;
   }
 
-  const secondSet = new Set(secondTokens);
+  const secondSet =
+    new Set(secondTokens);
 
-  // Exact word overlap is particularly useful for:
-  //
-  //   Mario
-  //   Mario Kart
-  //
-  // and:
-  //
-  //   Call of Duty
-  //   Call of Duty Black Ops
-  //
-  const sharedWords = firstTokens.filter(
-    token => secondSet.has(token),
-  );
+  const sharedWords =
+    firstTokens.filter(
+      token =>
+        secondSet.has(token),
+    );
 
   if (!sharedWords.length) {
     return false;
   }
 
-  // Very short generic words such as "the", "of", etc. shouldn't
-  // independently trigger a partial.
-  const meaningful = sharedWords.filter(
-    token => token.length >= 3,
-  );
+  const meaningful =
+    sharedWords.filter(
+      token => token.length >= 3,
+    );
 
   return meaningful.length > 0;
 }
 
-function hasStrongPrefixOverlap(first, second) {
-  const firstTokens = normalizedTokens(first);
-  const secondTokens = normalizedTokens(second);
+function hasStrongPrefixOverlap(
+  first,
+  second,
+) {
+  const firstTokens =
+    normalizedTokens(first);
 
-  if (!firstTokens.length || !secondTokens.length) {
+  const secondTokens =
+    normalizedTokens(second);
+
+  if (
+    !firstTokens.length ||
+    !secondTokens.length
+  ) {
     return false;
   }
 
-  const shorter = firstTokens.length <= secondTokens.length
-    ? firstTokens
-    : secondTokens;
+  const shorter =
+    firstTokens.length <=
+    secondTokens.length
+      ? firstTokens
+      : secondTokens;
 
-  const longer = firstTokens.length <= secondTokens.length
-    ? secondTokens
-    : firstTokens;
+  const longer =
+    firstTokens.length <=
+    secondTokens.length
+      ? secondTokens
+      : firstTokens;
 
-  // A title beginning with the same meaningful words is a strong
-  // series/title relationship.
-  if (shorter.length > longer.length) {
+  if (
+    shorter.length >
+    longer.length
+  ) {
     return false;
   }
 
-  for (let index = 0; index < shorter.length; index += 1) {
-    if (shorter[index] !== longer[index]) {
+  for (
+    let index = 0;
+    index < shorter.length;
+    index += 1
+  ) {
+    if (
+      shorter[index] !==
+      longer[index]
+    ) {
       return false;
     }
   }
 
-  return shorter.some(token => token.length >= 4);
+  return shorter.some(
+    token => token.length >= 4,
+  );
 }
 
-function levenshteinDistance(first, second) {
-  const a = compactCharacters(first);
-  const b = compactCharacters(second);
+function levenshteinDistance(
+  first,
+  second,
+) {
+  const a =
+    compactCharacters(first);
+
+  const b =
+    compactCharacters(second);
 
   if (!a.length) return b.length;
   if (!b.length) return a.length;
 
-  const previous = Array.from(
-    { length: b.length + 1 },
-    (_, index) => index,
-  );
+  const previous =
+    Array.from(
+      {
+        length:
+          b.length + 1,
+      },
+      (_, index) => index,
+    );
 
-  for (let i = 1; i <= a.length; i += 1) {
+  for (
+    let i = 1;
+    i <= a.length;
+    i += 1
+  ) {
     const current = [i];
 
-    for (let j = 1; j <= b.length; j += 1) {
-      const insertion = current[j - 1] + 1;
-      const deletion = previous[j] + 1;
+    for (
+      let j = 1;
+      j <= b.length;
+      j += 1
+    ) {
+      const insertion =
+        current[j - 1] + 1;
+
+      const deletion =
+        previous[j] + 1;
+
       const substitution =
         previous[j - 1] +
-        (a[i - 1] === b[j - 1] ? 0 : 1);
+        (
+          a[i - 1] === b[j - 1]
+            ? 0
+            : 1
+        );
 
       current.push(
         Math.min(
@@ -285,107 +382,160 @@ function levenshteinDistance(first, second) {
       );
     }
 
-    for (let j = 0; j < current.length; j += 1) {
-      previous[j] = current[j];
+    for (
+      let j = 0;
+      j < current.length;
+      j += 1
+    ) {
+      previous[j] =
+        current[j];
     }
   }
 
   return previous[b.length];
 }
 
-function editSimilarity(first, second) {
-  const a = compactCharacters(first);
-  const b = compactCharacters(second);
+function editSimilarity(
+  first,
+  second,
+) {
+  const a =
+    compactCharacters(first);
 
-  if (!a.length || !b.length) {
+  const b =
+    compactCharacters(second);
+
+  if (
+    !a.length ||
+    !b.length
+  ) {
     return 0;
   }
 
-  const distance = levenshteinDistance(a, b);
-  const longest = Math.max(a.length, b.length);
+  const distance =
+    levenshteinDistance(
+      a,
+      b,
+    );
 
-  return 1 - distance / longest;
+  const longest =
+    Math.max(
+      a.length,
+      b.length,
+    );
+
+  return (
+    1 -
+    distance / longest
+  );
 }
 
-function isPartialMatch(guess, game) {
-  const normalizedGuess = normalize(guess);
+function isPartialMatch(
+  guess,
+  game,
+) {
+  const normalizedGuess =
+    normalize(guess);
 
   if (!normalizedGuess) {
     return false;
   }
 
-  return answerNames(game).some(answer => {
-    if (normalizedGuess === answer) {
-      return false;
-    }
+  return answerNames(game).some(
+    answer => {
+      if (
+        normalizedGuess ===
+        answer
+      ) {
+        return false;
+      }
 
-    const guessLength =
-      compactCharacters(normalizedGuess).length;
+      const guessLength =
+        compactCharacters(
+          normalizedGuess,
+        ).length;
 
-    const answerLength =
-      compactCharacters(answer).length;
+      const answerLength =
+        compactCharacters(
+          answer,
+        ).length;
 
-    // Short answers need much stronger evidence.
-    //
-    // This is the important fix for:
-    //
-    //   Reel
-    //   Pokémon FireRed
-    //
-    // where four shared characters used to produce a false partial.
-    if (
-      Math.min(guessLength, answerLength) < 5
-    ) {
-      return (
+      // Short answers need much stronger evidence.
+      //
+      // This prevents:
+      //
+      //   Reel
+      //   Pokémon FireRed
+      //
+      // from becoming a false partial.
+      if (
+        Math.min(
+          guessLength,
+          answerLength,
+        ) < 5
+      ) {
+        return (
+          hasMeaningfulWordOverlap(
+            normalizedGuess,
+            answer,
+          ) ||
+          hasStrongPrefixOverlap(
+            normalizedGuess,
+            answer,
+          )
+        );
+      }
+
+      if (
         hasMeaningfulWordOverlap(
           normalizedGuess,
           answer,
-        ) ||
+        )
+      ) {
+        return true;
+      }
+
+      if (
         hasStrongPrefixOverlap(
           normalizedGuess,
           answer,
         )
+      ) {
+        return true;
+      }
+
+      return (
+        Math.min(
+          guessLength,
+          answerLength,
+        ) >= 6 &&
+        editSimilarity(
+          normalizedGuess,
+          answer,
+        ) >= 0.72
       );
-    }
-
-    if (
-      hasMeaningfulWordOverlap(
-        normalizedGuess,
-        answer,
-      )
-    ) {
-      return true;
-    }
-
-    if (
-      hasStrongPrefixOverlap(
-        normalizedGuess,
-        answer,
-      )
-    ) {
-      return true;
-    }
-
-    // Character-level similarity is now only a fallback.
-    // Require strong edit similarity and reasonably sized titles.
-    return (
-      Math.min(guessLength, answerLength) >= 6 &&
-      editSimilarity(
-        normalizedGuess,
-        answer,
-      ) >= 0.72
-    );
-  });
+    },
+  );
 }
 
 function guessStatus(value) {
-  const normalized = normalize(value);
+  const normalized =
+    normalize(value);
 
-  if (answerNames(puzzle).includes(normalized)) {
+  if (
+    answerNames(puzzle).includes(
+      normalized,
+    )
+  ) {
     return "correct";
   }
 
-  if (isPartialMatch(normalized, puzzle)) {
+  if (
+    isPartialMatch(
+      normalized,
+      puzzle,
+    )
+  ) {
     return "partial";
   }
 
@@ -398,17 +548,22 @@ function guessStatus(value) {
 /* -------------------------------------------------------------------------- */
 
 function selectedImage(game) {
-  const usable = (game.images || []).filter(
-    image => image.path,
-  );
+  const usable =
+    (game.images || []).filter(
+      image => image.path,
+    );
 
-  if (!usable.length) return null;
+  if (!usable.length) {
+    return null;
+  }
 
   // First logical image for v1.
   return usable[0];
 }
 
-function clarityForGuessCount(count) {
+function clarityForGuessCount(
+  count,
+) {
   const levels = [
     ["Very pixelated", 12],
     ["Heavily pixelated", 20],
@@ -419,29 +574,42 @@ function clarityForGuessCount(count) {
   ];
 
   return levels[
-    Math.min(count, levels.length - 1)
+    Math.min(
+      count,
+      levels.length - 1,
+    )
   ];
 }
 
-function drawPixelated(forceClear = false) {
+function drawPixelated(
+  forceClear = false,
+) {
   if (!sourceImage) return;
 
   const width =
-    elements.canvas.clientWidth || 800;
+    elements.canvas.clientWidth ||
+    800;
 
   const height =
-    elements.canvas.clientHeight || 450;
+    elements.canvas.clientHeight ||
+    450;
 
-  const dpr = Math.min(
-    window.devicePixelRatio || 1,
-    2,
-  );
+  const dpr =
+    Math.min(
+      window.devicePixelRatio ||
+        1,
+      2,
+    );
 
   elements.canvas.width =
-    Math.round(width * dpr);
+    Math.round(
+      width * dpr,
+    );
 
   elements.canvas.height =
-    Math.round(height * dpr);
+    Math.round(
+      height * dpr,
+    );
 
   ctx.clearRect(
     0,
@@ -450,7 +618,8 @@ function drawPixelated(forceClear = false) {
     elements.canvas.height,
   );
 
-  const targetRatio = width / height;
+  const targetRatio =
+    width / height;
 
   const sourceRatio =
     sourceImage.naturalWidth /
@@ -458,29 +627,39 @@ function drawPixelated(forceClear = false) {
 
   let sx = 0;
   let sy = 0;
-  let sw = sourceImage.naturalWidth;
-  let sh = sourceImage.naturalHeight;
+  let sw =
+    sourceImage.naturalWidth;
+  let sh =
+    sourceImage.naturalHeight;
 
-  if (sourceRatio > targetRatio) {
+  if (
+    sourceRatio >
+    targetRatio
+  ) {
     sw =
       sourceImage.naturalHeight *
       targetRatio;
 
     sx =
-      (sourceImage.naturalWidth - sw) /
-      2;
+      (
+        sourceImage.naturalWidth -
+        sw
+      ) / 2;
   } else {
     sh =
       sourceImage.naturalWidth /
       targetRatio;
 
     sy =
-      (sourceImage.naturalHeight - sh) /
-      2;
+      (
+        sourceImage.naturalHeight -
+        sh
+      ) / 2;
   }
 
   if (forceClear) {
-    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingEnabled =
+      true;
 
     ctx.drawImage(
       sourceImage,
@@ -505,30 +684,50 @@ function drawPixelated(forceClear = false) {
   let smallWidth;
   let smallHeight;
 
-  if (targetRatio >= 1) {
-    smallHeight = pixelSize;
-    smallWidth = Math.max(
-      8,
-      Math.round(pixelSize * targetRatio),
-    );
+  if (
+    targetRatio >= 1
+  ) {
+    smallHeight =
+      pixelSize;
+
+    smallWidth =
+      Math.max(
+        8,
+        Math.round(
+          pixelSize *
+            targetRatio,
+        ),
+      );
   } else {
-    smallWidth = pixelSize;
-    smallHeight = Math.max(
-      8,
-      Math.round(pixelSize / targetRatio),
-    );
+    smallWidth =
+      pixelSize;
+
+    smallHeight =
+      Math.max(
+        8,
+        Math.round(
+          pixelSize /
+            targetRatio,
+        ),
+      );
   }
 
   const temp =
-    document.createElement("canvas");
+    document.createElement(
+      "canvas",
+    );
 
-  temp.width = smallWidth;
-  temp.height = smallHeight;
+  temp.width =
+    smallWidth;
+
+  temp.height =
+    smallHeight;
 
   const tempCtx =
     temp.getContext("2d");
 
-  tempCtx.imageSmoothingEnabled = true;
+  tempCtx.imageSmoothingEnabled =
+    true;
 
   tempCtx.drawImage(
     sourceImage,
@@ -542,7 +741,8 @@ function drawPixelated(forceClear = false) {
     smallHeight,
   );
 
-  ctx.imageSmoothingEnabled = false;
+  ctx.imageSmoothingEnabled =
+    false;
 
   ctx.drawImage(
     temp,
@@ -589,20 +789,25 @@ function statusDetail(status) {
 }
 
 function renderGuesses() {
-  elements.guesses.innerHTML = "";
+  elements.guesses.innerHTML =
+    "";
 
   for (
     let index = 0;
     index < MAX_GUESSES;
     index += 1
   ) {
-    const guess = guesses[index];
+    const guess =
+      guesses[index];
 
     const row =
-      document.createElement("li");
+      document.createElement(
+        "li",
+      );
 
     if (!guess) {
-      row.className = "guess-row empty";
+      row.className =
+        "guess-row empty";
 
       row.innerHTML = `
         <span class="guess-name">—</span>
@@ -612,7 +817,10 @@ function renderGuesses() {
         </span>
       `;
 
-      elements.guesses.appendChild(row);
+      elements.guesses.appendChild(
+        row,
+      );
+
       continue;
     }
 
@@ -637,7 +845,9 @@ function renderGuesses() {
       </span>
     `;
 
-    elements.guesses.appendChild(row);
+    elements.guesses.appendChild(
+      row,
+    );
   }
 
   elements.progress.textContent =
@@ -657,7 +867,9 @@ function renderGuesses() {
 
 function escapeHtml(value) {
   const div =
-    document.createElement("div");
+    document.createElement(
+      "div",
+    );
 
   div.textContent = value;
 
@@ -703,21 +915,28 @@ function finishGame(success) {
   finished = true;
   won = success;
 
-  elements.input.disabled = true;
-  elements.button.disabled = true;
+  elements.input.disabled =
+    true;
+
+  elements.button.disabled =
+    true;
+
+  hideSuggestions();
 
   if (success) {
     drawPixelated(true);
   }
 
-  elements.result.hidden = false;
-  elements.result.classList.add("pop");
+  elements.result.hidden =
+    false;
+
+  elements.result.classList.add(
+    "pop",
+  );
 
   if (success) {
     elements.resultKicker.textContent =
-      mode === "free"
-        ? "Nice one"
-        : "Nice one";
+      "Nice one";
 
     elements.resultTitle.textContent =
       puzzle.name;
@@ -743,6 +962,8 @@ function finishGame(success) {
       `The answer was ${puzzle.name}.`;
   }
 
+  updateReportDialog();
+
   saveState();
   renderGuesses();
 }
@@ -753,9 +974,15 @@ function finishGame(success) {
 /* -------------------------------------------------------------------------- */
 
 function submitGuess(value) {
-  const guess = value.trim();
+  const guess =
+    value.trim();
 
-  if (!guess || finished) return;
+  if (
+    !guess ||
+    finished
+  ) {
+    return;
+  }
 
   const normalized =
     normalize(guess);
@@ -785,7 +1012,10 @@ function submitGuess(value) {
 
   guesses.push(guess);
 
-  elements.input.value = "";
+  elements.input.value =
+    "";
+
+  hideSuggestions();
 
   drawPixelated();
   renderGuesses();
@@ -800,17 +1030,24 @@ function submitGuess(value) {
     "pop",
   );
 
-  if (status === "correct") {
+  if (
+    status === "correct"
+  ) {
     finishGame(true);
     return;
   }
 
-  if (guesses.length >= MAX_GUESSES) {
+  if (
+    guesses.length >=
+    MAX_GUESSES
+  ) {
     finishGame(false);
     return;
   }
 
-  if (status === "partial") {
+  if (
+    status === "partial"
+  ) {
     setMessage(
       "🟨 Close! You're in the right neighborhood.",
     );
@@ -821,6 +1058,7 @@ function submitGuess(value) {
   }
 
   saveState();
+
   elements.input.focus();
 }
 
@@ -842,53 +1080,101 @@ function populateSuggestions() {
 }
 
 function hideSuggestions() {
-  if (!elements.suggestions) return;
+  if (!elements.suggestions) {
+    return;
+  }
 
-  elements.suggestions.hidden = true;
-  elements.suggestions.innerHTML = "";
+  elements.suggestions.hidden =
+    true;
+
+  elements.suggestions.innerHTML =
+    "";
+
+  elements.input?.setAttribute(
+    "aria-expanded",
+    "false",
+  );
 }
 
 function showSuggestions(matches) {
-  if (!elements.suggestions) return;
+  if (!elements.suggestions) {
+    return;
+  }
 
-  elements.suggestions.innerHTML = "";
+  elements.suggestions.innerHTML =
+    "";
 
   if (!matches.length) {
     hideSuggestions();
     return;
   }
 
-  matches.forEach(name => {
-    const option =
-      document.createElement("button");
+  matches.forEach(
+    (name, index) => {
+      const option =
+        document.createElement(
+          "button",
+        );
 
-    option.type = "button";
-    option.className = "suggestion";
-    option.setAttribute("role", "option");
-    option.textContent = name;
+      option.type = "button";
+      option.className =
+        "suggestion";
 
-    option.addEventListener(
-      "click",
-      () => {
-        elements.input.value = name;
-        hideSuggestions();
-        elements.input.focus();
-      },
-    );
+      option.setAttribute(
+        "role",
+        "option",
+      );
 
-    elements.suggestions.appendChild(option);
-  });
+      option.setAttribute(
+        "aria-selected",
+        "false",
+      );
 
-  elements.suggestions.hidden = false;
+      option.dataset.index =
+        String(index);
+
+      option.textContent =
+        name;
+
+      option.addEventListener(
+        "click",
+        () => {
+          elements.input.value =
+            name;
+
+          hideSuggestions();
+
+          elements.input.focus();
+        },
+      );
+
+      elements.suggestions.appendChild(
+        option,
+      );
+    },
+  );
+
+  elements.suggestions.hidden =
+    false;
+
+  elements.input?.setAttribute(
+    "aria-expanded",
+    "true",
+  );
 }
 
 function updateAutocomplete() {
-  if (!elements.input) return;
+  if (!elements.input) {
+    return;
+  }
 
   const value =
     elements.input.value.trim();
 
-  if (value.length < 3) {
+  if (
+    value.length < 3 ||
+    finished
+  ) {
     hideSuggestions();
     return;
   }
@@ -907,6 +1193,73 @@ function updateAutocomplete() {
 
   showSuggestions(matches);
 }
+
+
+/* -------------------------------------------------------------------------- */
+/* Puzzle issue reporting                                                     */
+/* -------------------------------------------------------------------------- */
+
+function updateReportDialog() {
+  if (!puzzle) {
+    return;
+  }
+
+  const puzzleId =
+    puzzle.id || "unknown";
+
+  if (elements.reportPuzzleId) {
+    elements.reportPuzzleId.textContent =
+      puzzleId;
+  }
+
+  if (elements.reportIssueLink) {
+    elements.reportIssueLink.href =
+      buildIssueUrl();
+  }
+}
+
+function buildIssueUrl() {
+  const puzzleId =
+    puzzle?.id || "unknown";
+
+  const sourceUrl =
+    puzzle?.source?.url || "";
+
+  const title =
+    `[Puzzle] Issue with ${puzzleId}`;
+
+  const body = [
+    "## Puzzle information",
+    "",
+    `- Puzzle ID: \`${puzzleId}\``,
+    `- VGSM source page: ${sourceUrl || "Unknown"}`,
+    "",
+    "## Problem",
+    "",
+    "<!-- What is wrong with this puzzle?",
+    "Examples: wrong image, broken image, missing image, incorrect metadata. -->",
+    "",
+  ].join("\n");
+
+  const params =
+    new URLSearchParams({
+      title,
+      body,
+    });
+
+  return `${GITHUB_ISSUE_URL}?${params.toString()}`;
+}
+
+function openReportDialog() {
+  if (!puzzle) {
+    return;
+  }
+
+  updateReportDialog();
+
+  elements.reportDialog.showModal();
+}
+
 
 /* -------------------------------------------------------------------------- */
 /* Sharing                                                                    */
@@ -1026,7 +1379,8 @@ function selectFreePuzzle() {
   const candidates =
     games.filter(
       game =>
-        game.id !== previousId,
+        game.id !==
+        previousId,
     );
 
   const pool =
@@ -1036,7 +1390,8 @@ function selectFreePuzzle() {
 
   const index =
     Math.floor(
-      Math.random() * pool.length,
+      Math.random() *
+        pool.length,
     );
 
   return pool[index];
@@ -1073,8 +1428,13 @@ function updateModeUI() {
 /* Start a puzzle                                                             */
 /* -------------------------------------------------------------------------- */
 
-async function startPuzzle(nextPuzzle, nextMode) {
-  if (!nextPuzzle) return;
+async function startPuzzle(
+  nextPuzzle,
+  nextMode,
+) {
+  if (!nextPuzzle) {
+    return;
+  }
 
   mode = nextMode;
   puzzle = nextPuzzle;
@@ -1084,19 +1444,32 @@ async function startPuzzle(nextPuzzle, nextMode) {
   finished = false;
   won = false;
 
-  elements.input.disabled = false;
-  elements.button.disabled = false;
+  elements.input.disabled =
+    false;
 
-  elements.input.value = "";
+  elements.button.disabled =
+    false;
 
-  elements.result.hidden = true;
-  elements.result.classList.remove("pop");
+  elements.input.value =
+    "";
 
-  elements.placeholder.hidden = false;
+  hideSuggestions();
+
+  elements.result.hidden =
+    true;
+
+  elements.result.classList.remove(
+    "pop",
+  );
+
+  elements.placeholder.hidden =
+    false;
+
   elements.placeholder.textContent =
     "Loading…";
 
   updateModeUI();
+  updateReportDialog();
   renderGuesses();
 
   const image =
@@ -1168,6 +1541,7 @@ async function loadGame() {
     populateSuggestions();
 
     mode = "daily";
+
     puzzle =
       selectDailyPuzzle();
 
@@ -1192,6 +1566,7 @@ async function loadGame() {
       true;
 
     updateModeUI();
+    updateReportDialog();
 
     drawPixelated();
     renderGuesses();
@@ -1274,6 +1649,11 @@ elements.share.addEventListener(
   shareResult,
 );
 
+
+/* -------------------------------------------------------------------------- */
+/* Help dialog                                                                */
+/* -------------------------------------------------------------------------- */
+
 elements.help.addEventListener(
   "click",
   () =>
@@ -1298,6 +1678,68 @@ elements.dialog.addEventListener(
   },
 );
 
+
+/* -------------------------------------------------------------------------- */
+/* Report dialog                                                              */
+/* -------------------------------------------------------------------------- */
+
+elements.report.addEventListener(
+  "click",
+  openReportDialog,
+);
+
+elements.reportClose.addEventListener(
+  "click",
+  () =>
+    elements.reportDialog.close(),
+);
+
+elements.reportDialog.addEventListener(
+  "click",
+  event => {
+    if (
+      event.target ===
+      elements.reportDialog
+    ) {
+      elements.reportDialog.close();
+    }
+  },
+);
+
+
+/* -------------------------------------------------------------------------- */
+/* Autocomplete dismissal                                                     */
+/* -------------------------------------------------------------------------- */
+
+document.addEventListener(
+  "click",
+  event => {
+    if (
+      !elements.suggestions ||
+      elements.suggestions.hidden
+    ) {
+      return;
+    }
+
+    if (
+      elements.suggestions.contains(
+        event.target,
+      ) ||
+      event.target ===
+        elements.input
+    ) {
+      return;
+    }
+
+    hideSuggestions();
+  },
+);
+
+
+/* -------------------------------------------------------------------------- */
+/* Free Play                                                                  */
+/* -------------------------------------------------------------------------- */
+
 if (elements.freePlay) {
   elements.freePlay.addEventListener(
     "click",
@@ -1306,7 +1748,9 @@ if (elements.freePlay) {
         const nextPuzzle =
           selectFreePuzzle();
 
-        if (!nextPuzzle) return;
+        if (!nextPuzzle) {
+          return;
+        }
 
         await startPuzzle(
           nextPuzzle,
@@ -1326,6 +1770,11 @@ if (elements.freePlay) {
     },
   );
 }
+
+
+/* -------------------------------------------------------------------------- */
+/* Canvas resize                                                              */
+/* -------------------------------------------------------------------------- */
 
 window.addEventListener(
   "resize",
