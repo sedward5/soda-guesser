@@ -1,10 +1,12 @@
 {
   "schema_version": 1,
   "source": "https://vgsmproject.com",
-  "discovered_posts": 2376,
-  "usable_posts": 2375,
-  "requested_samples": 5,
-  "successful_games": 5,
+  "discovered_posts": 2377,
+  "usable_posts": 2376,
+  "existing_games": 5,
+  "new_games_discovered": 2371,
+  "new_games_added": 2371,
+  "total_games": 2376,
   "skipped_posts_without_images": 1,
   "warnings": []
 }
