@@ -829,29 +829,57 @@ function submitGuess(value) {
 /* Autocomplete                                                               */
 /* -------------------------------------------------------------------------- */
 
+let suggestionNames = [];
+
 function populateSuggestions() {
-  if (!elements.suggestions) return;
-
-  elements.suggestions.innerHTML = "";
-
-  const names = [
+  suggestionNames = [
     ...new Set(
       games
         .map(game => game.name)
         .filter(Boolean),
     ),
   ];
+}
 
-  names.forEach(name => {
+function hideSuggestions() {
+  if (!elements.suggestions) return;
+
+  elements.suggestions.hidden = true;
+  elements.suggestions.innerHTML = "";
+}
+
+function showSuggestions(matches) {
+  if (!elements.suggestions) return;
+
+  elements.suggestions.innerHTML = "";
+
+  if (!matches.length) {
+    hideSuggestions();
+    return;
+  }
+
+  matches.forEach(name => {
     const option =
-      document.createElement("option");
+      document.createElement("button");
 
-    option.value = name;
+    option.type = "button";
+    option.className = "suggestion";
+    option.setAttribute("role", "option");
+    option.textContent = name;
 
-    elements.suggestions.appendChild(
-      option,
+    option.addEventListener(
+      "click",
+      () => {
+        elements.input.value = name;
+        hideSuggestions();
+        elements.input.focus();
+      },
     );
+
+    elements.suggestions.appendChild(option);
   });
+
+  elements.suggestions.hidden = false;
 }
 
 function updateAutocomplete() {
@@ -860,14 +888,25 @@ function updateAutocomplete() {
   const value =
     elements.input.value.trim();
 
-  elements.input.setAttribute(
-    "list",
-    value.length >= 3
-      ? "guess-suggestions"
-      : "",
-  );
-}
+  if (value.length < 3) {
+    hideSuggestions();
+    return;
+  }
 
+  const normalizedQuery =
+    normalize(value);
+
+  const matches =
+    suggestionNames
+      .filter(name =>
+        normalize(name).includes(
+          normalizedQuery,
+        ),
+      )
+      .slice(0, 8);
+
+  showSuggestions(matches);
+}
 
 /* -------------------------------------------------------------------------- */
 /* Sharing                                                                    */
