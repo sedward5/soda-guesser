@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+
   <meta
     name="viewport"
     content="width=device-width, initial-scale=1, viewport-fit=cover"
@@ -20,7 +21,7 @@
   <title>Pop Quiz — Video Game Guessing Game</title>
 
   <!-- Bump this version whenever CSS/JS changes during development. -->
-  <link rel="stylesheet" href="styles.css?v=4">
+  <link rel="stylesheet" href="styles.css?v=5">
 </head>
 
 <body>
@@ -106,24 +107,35 @@
           Guess the video game
         </label>
 
-        <input
-          id="guess-input"
-          name="guess"
-          type="text"
-          inputmode="text"
-          enterkeyhint="send"
-          maxlength="80"
-          placeholder="Name that game…"
-          aria-describedby="guess-message"
-          spellcheck="false"
-          autocomplete="off"
-          autocorrect="off"
-          autocapitalize="off"
-          list="guess-suggestions"
-          autofocus
-        >
+        <div class="guess-input-wrap">
 
-        <datalist id="guess-suggestions"></datalist>
+          <input
+            id="guess-input"
+            name="guess"
+            type="text"
+            inputmode="text"
+            enterkeyhint="send"
+            maxlength="80"
+            placeholder="Name that game…"
+            aria-describedby="guess-message"
+            aria-controls="guess-suggestions"
+            aria-autocomplete="list"
+            spellcheck="false"
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="off"
+            autofocus
+          >
+
+          <div
+            id="guess-suggestions"
+            class="suggestions"
+            role="listbox"
+            aria-label="Game suggestions"
+            hidden
+          ></div>
+
+        </div>
 
         <button
           id="guess-button"
@@ -243,6 +255,6 @@
   </dialog>
 
   <!-- Bump this version whenever JS changes during development. -->
-  <script src="game.js?v=4"></script>
+  <script src="game.js?v=5"></script>
 </body>
 </html>
