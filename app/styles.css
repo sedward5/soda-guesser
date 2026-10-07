@@ -1,0 +1,344 @@
+:root {
+  --bg: #f7f5f0;
+  --surface: #ffffff;
+  --text: #22201d;
+  --muted: #716d67;
+  --border: #dedad2;
+  --accent: #2e6b4e;
+  --accent-dark: #24553f;
+  --wrong: #b75c4d;
+  --success: #2e6b4e;
+  --shadow: 0 12px 35px rgba(35, 31, 25, 0.08);
+  --radius: 18px;
+}
+
+* { box-sizing: border-box; }
+
+html { min-height: 100%; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100svh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-rounded, "SF Pro Rounded", "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input { font: inherit; }
+
+button { cursor: pointer; }
+
+a { color: inherit; }
+
+.game-shell {
+  width: min(100% - 28px, 760px);
+  margin: 0 auto;
+  padding: 20px 0 max(24px, env(safe-area-inset-bottom));
+}
+
+.game-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 4px 2px 18px;
+}
+
+.eyebrow {
+  margin: 0 0 3px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(1.7rem, 5vw, 2.25rem);
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.icon-button,
+.dialog-close {
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--muted);
+  font-weight: 750;
+}
+
+.icon-button:hover,
+.dialog-close:hover { color: var(--text); }
+
+.game-card {
+  padding: clamp(12px, 2.5vw, 20px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.image-frame {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #171614;
+}
+
+#game-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+
+.image-placeholder {
+  position: absolute;
+  color: #aaa59d;
+  font-size: 0.9rem;
+}
+
+.status-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 2px 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.guess-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.guess-form input {
+  min-width: 0;
+  height: 50px;
+  padding: 0 15px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  outline: none;
+  background: #fff;
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.guess-form input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(46, 107, 78, 0.12);
+}
+
+.guess-form input:disabled { background: #f0eee9; }
+
+.guess-form button,
+.secondary-button {
+  min-height: 50px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--accent);
+  color: white;
+  font-weight: 750;
+}
+
+.guess-form button:hover,
+.secondary-button:hover { background: var(--accent-dark); }
+
+.guess-form button:disabled { opacity: 0.5; cursor: default; }
+
+.message {
+  min-height: 24px;
+  margin: 8px 2px 2px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.message.error { color: var(--wrong); }
+
+.guesses {
+  display: grid;
+  gap: 6px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.guess-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 9px;
+  background: #f3f1ec;
+  font-size: 0.88rem;
+}
+
+.guess-row.wrong { color: #55514b; }
+
+.guess-row .attempt {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
+.result {
+  margin-top: 14px;
+  padding: 16px;
+  border-radius: 12px;
+  background: #eef4ef;
+  text-align: center;
+}
+
+.result-kicker {
+  margin: 0 0 3px;
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.result h2 {
+  margin: 0;
+  font-size: clamp(1.3rem, 5vw, 1.75rem);
+  letter-spacing: -0.03em;
+}
+
+.result p:not(.result-kicker) {
+  margin: 5px 0 14px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.secondary-button {
+  min-height: 42px;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid rgba(46, 107, 78, 0.35);
+}
+
+.secondary-button:hover {
+  background: rgba(46, 107, 78, 0.08);
+}
+
+.game-footer {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.game-footer a:hover { color: var(--text); }
+
+dialog {
+  width: min(92vw, 430px);
+  padding: 0;
+  border: 0;
+  border-radius: 18px;
+  box-shadow: 0 25px 70px rgba(0, 0, 0, 0.2);
+}
+
+dialog::backdrop {
+  background: rgba(20, 18, 15, 0.45);
+  backdrop-filter: blur(2px);
+}
+
+.dialog-inner {
+  position: relative;
+  padding: 28px;
+}
+
+.dialog-inner h2 {
+  margin: 5px 0 12px;
+  font-size: 1.5rem;
+}
+
+.dialog-inner p {
+  color: #55514b;
+  line-height: 1.55;
+}
+
+.dialog-small {
+  font-size: 0.82rem;
+}
+
+.dialog-close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.shake { animation: shake 260ms ease-in-out; }
+
+.pop { animation: pop 220ms ease-out; }
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+
+@keyframes pop {
+  0% { transform: scale(0.98); opacity: 0.4; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@media (max-width: 520px) {
+  .game-shell {
+    width: min(100% - 16px, 760px);
+    padding-top: 10px;
+  }
+
+  .game-header { padding-bottom: 12px; }
+
+  .game-card {
+    padding: 10px;
+    border-radius: 14px;
+  }
+
+  .image-frame {
+    aspect-ratio: 4 / 3;
+    border-radius: 9px;
+  }
+
+  .guess-form {
+    grid-template-columns: 1fr;
+  }
+
+  .guess-form button {
+    width: 100%;
+  }
+
+  .game-footer {
+    padding-bottom: 8px;
+  }
+}
