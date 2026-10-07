@@ -1,0 +1,234 @@
+{
+  "schema_version": 1,
+  "source": {
+    "name": "Video Game Soda Machine Project",
+    "url": "https://vgsmproject.com"
+  },
+  "games": [
+    {
+      "id": "wp-10243",
+      "name": "Epic Skater 2",
+      "normalized_name": "epic skater 2",
+      "aliases": [],
+      "series": null,
+      "accept": [
+        "epic skater 2"
+      ],
+      "partial": [],
+      "article": "https://vgsmproject.com/2019/03/11/epic-skater-2/",
+      "source": {
+        "site": "vgsm",
+        "url": "https://vgsmproject.com/2019/03/11/epic-skater-2/",
+        "post_id": 10243,
+        "date": "2019-03-11T11:53:20"
+      },
+      "categories": [
+        1402
+      ],
+      "tags": [],
+      "images": [
+        {
+          "source_url": "https://vgsmproject.com/wp-content/uploads/2019/03/epicskater2.jpg",
+          "path": "/assets/images/wp-10243-1.jpg",
+          "alt": ""
+        },
+        {
+          "source_url": "https://vgsmproject.com/wp-content/uploads/2019/03/epicskater2-300x150.jpg",
+          "path": "/assets/images/wp-10243-2.jpg",
+          "alt": ""
+        },
+        {
+          "source_url": "https://vgsmproject.com/wp-content/uploads/2019/03/epicskater2-768x384.jpg",
+          "path": "/assets/images/wp-10243-3.jpg",
+          "alt": ""
+        },
+        {
+          "source_url": "https://vgsmproject.com/wp-content/uploads/2019/03/epicskater2-1024x512.jpg",
+          "path": "/assets/images/wp-10243-4.jpg",
+          "alt": ""
+        },
+        {
+          "source_url": "https://vgsmproject.com/wp-content/uploads/2019/03/epicskater2-840x420.jpg",
+          "path": "/assets/images/wp-10243-5.jpg",
+          "alt": ""
+        }
+      ]
+    },
+    {
+      "id": "wp-87",
+      "name": "Dreamfall: The Longest Journey",
+      "normalized_name": "dreamfall the longest journey",
+      "aliases": [],
+      "series": null,
+      "accept": [
+        "dreamfall the longest journey"
+      ],
+      "partial": [],
+      "article": "https://vgsmproject.com/2016/09/16/dreamfall-the-longest-journey/",
+      "source": {
+        "site": "vgsm",
+        "url": "https://vgsmproject.com/2016/09/16/dreamfall-the-longest-journey/",
+        "post_id": 87,
+        "date": "2016-09-16T00:55:38"
+      },
+      "categories": [
+        25
+      ],
+      "tags": [],
+      "images": [
+        {
+          "source_url": "https://vgsmproject.com/wp-content/uploads/2016/09/dreamfall.jpg",
+          "path": "/assets/images/wp-87-1.jpg",
+          "alt": ""
+        },
+        {
+          "source_url": "https://vgsmproject.com/wp-content/uploads/2016/09/dreamfall-300x188.jpg",
+          "path": "/assets/images/wp-87-2.jpg",
+          "alt": ""
+        },
+        {
+          "source_url": "https://vgsmproject.com/wp-content/uploads/2016/09/dreamfall-768x480.jpg",
+          "path": "/assets/images/wp-87-3.jpg",
+          "alt": ""
+        },
+        {
+          "source_url": "https://vgsmproject.com/wp-content/uploads/2016/09/dreamfall-1024x640.jpg",
+          "path": "/assets/images/wp-87-4.jpg",
+          "alt": ""
+        }
+      ]
+    },
+    {
+      "id": "wp-8250",
+      "name": "Ueki no Hōsoku: Taosu ze Roberuto Jūdan!!",
+      "normalized_name": "ueki no h soku taosu ze roberuto j dan",
+      "aliases": [],
+      "series": null,
+      "accept": [
+        "ueki no h soku taosu ze roberuto j dan"
+      ],
+      "partial": [],
+      "article": "https://vgsmproject.com/2018/07/24/ueki-no-hosoku-taosu-ze-roberuto-judan/",
+      "source": {
+        "site": "vgsm",
+        "url": "https://vgsmproject.com/2018/07/24/ueki-no-hosoku-taosu-ze-roberuto-judan/",
+        "post_id": 8250,
+        "date": "2018-07-24T11:22:25"
+      },
+      "categories": [
+        1185
+      ],
+      "tags": [],
+      "images": [
+        {
+          "source_url": "https://vgsmproject.com/wp-content/uploads/2018/07/law_of_ueki.jpg",
+          "path": "/assets/images/wp-8250-1.jpg",
+          "alt": ""
+        },
+        {
+          "source_url": "https://vgsmproject.com/wp-content/uploads/2018/07/law_of_ueki-300x225.jpg",
+          "path": "/assets/images/wp-8250-2.jpg",
+          "alt": ""
+        },
+        {
+          "source_url": "https://vgsmproject.com/wp-content/uploads/2018/07/law_of_ueki-768x576.jpg",
+          "path": "/assets/images/wp-8250-3.jpg",
+          "alt": ""
+        }
+      ]
+    },
+    {
+      "id": "wp-12228",
+      "name": "River City Girls 2",
+      "normalized_name": "river city girls 2",
+      "aliases": [],
+      "series": null,
+      "accept": [
+        "river city girls 2"
+      ],
+      "partial": [],
+      "article": "https://vgsmproject.com/2026/09/25/river-city-girls-2/",
+      "source": {
+        "site": "vgsm",
+        "url": "https://vgsmproject.com/2026/09/25/river-city-girls-2/",
+        "post_id": 12228,
+        "date": "2026-09-25T09:30:01"
+      },
+      "categories": [
+        126
+      ],
+      "tags": [],
+      "images": [
+        {
+          "source_url": "https://vgsmproject.com/wp-content/uploads/2026/07/rivercitygirls2.webp",
+          "path": "/assets/images/wp-12228-1.webp",
+          "alt": ""
+        },
+        {
+          "source_url": "https://vgsmproject.com/wp-content/uploads/2026/07/rivercitygirls2-300x169.webp",
+          "path": "/assets/images/wp-12228-2.webp",
+          "alt": ""
+        },
+        {
+          "source_url": "https://vgsmproject.com/wp-content/uploads/2026/07/rivercitygirls2-1024x576.webp",
+          "path": "/assets/images/wp-12228-3.webp",
+          "alt": ""
+        },
+        {
+          "source_url": "https://vgsmproject.com/wp-content/uploads/2026/07/rivercitygirls2-768x432.webp",
+          "path": "/assets/images/wp-12228-4.webp",
+          "alt": ""
+        },
+        {
+          "source_url": "https://vgsmproject.com/wp-content/uploads/2026/07/rivercitygirls2-1536x864.webp",
+          "path": "/assets/images/wp-12228-5.webp",
+          "alt": ""
+        }
+      ]
+    },
+    {
+      "id": "wp-497",
+      "name": "Metal Gear Solid 2: Sons of Liberty",
+      "normalized_name": "metal gear solid 2 sons of liberty",
+      "aliases": [],
+      "series": null,
+      "accept": [
+        "metal gear solid 2 sons of liberty"
+      ],
+      "partial": [],
+      "article": "https://vgsmproject.com/2016/09/16/metal-gear-solid-2-sons-of-liberty/",
+      "source": {
+        "site": "vgsm",
+        "url": "https://vgsmproject.com/2016/09/16/metal-gear-solid-2-sons-of-liberty/",
+        "post_id": 497,
+        "date": "2016-09-16T17:55:33"
+      },
+      "categories": [
+        113
+      ],
+      "tags": [],
+      "images": [
+        {
+          "source_url": "https://vgsmproject.com/wp-content/uploads/2016/09/metalgearsons.jpg",
+          "path": "/assets/images/wp-497-1.jpg",
+          "alt": ""
+        },
+        {
+          "source_url": "https://vgsmproject.com/wp-content/uploads/2016/09/metalgearsons-300x169.jpg",
+          "path": "/assets/images/wp-497-2.jpg",
+          "alt": ""
+        },
+        {
+          "source_url": "https://vgsmproject.com/wp-content/uploads/2016/09/metalgearsons-768x432.jpg",
+          "path": "/assets/images/wp-497-3.jpg",
+          "alt": ""
+        },
+        {
+          "source_url": "https://vgsmproject.com/wp-content/uploads/2016/09/metalgearsons-1024x576.jpg",
+          "path": "/assets/images/wp-497-4.jpg",
+          "alt": ""
+        }
+      ]
+    }
+  ]
+}
