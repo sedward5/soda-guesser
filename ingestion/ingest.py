@@ -3,11 +3,21 @@
 Ingest a random sample of games from the Video Game Soda Machine Project.
 
 VGSM stores many of its images directly inside post content rather than as
-WordPress featured images. This ingestion process therefore extracts image
-URLs from the rendered post content returned by the WordPress REST API.
+WordPress featured images.
 
-The resulting dataset is deliberately independent of WordPress so that the
-static game application does not need to know anything about the source site.
+WordPress also generates multiple responsive versions of the same image,
+such as:
+
+    game.jpg
+    game-300x150.jpg
+    game-768x384.jpg
+    game-1024x512.jpg
+
+This importer treats those as one logical image and selects the largest
+available version.
+
+The resulting dataset is independent of WordPress so the static game
+application does not need to know anything about the source site.
 """
 
 from __future__ import annotations
@@ -16,6 +26,7 @@ import json
 import random
 import re
 import sys
+import unicodedata
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlparse
@@ -43,7 +54,7 @@ REPORT_FILE = DATA_DIR / "ingestion-report.json"
 
 REQUEST_TIMEOUT = 30
 
-USER_AGENT = "VGSM-Guessing-Game-Ingest/0.1"
+USER_AGENT = "VGSM-Guessing-Game-Ingest/0.2"
 
 
 # ---------------------------------------------------------------------------
@@ -60,35 +71,13 @@ SESSION.headers.update(
 )
 
 
-def get_json(
-    url: str,
-    params: dict[str, Any] | None = None,
-) -> Any:
-    """GET a JSON resource and fail with a useful error message."""
-
-    response = SESSION.get(
-        url,
-        params=params,
-        timeout=REQUEST_TIMEOUT,
-    )
-
-    response.raise_for_status()
-
-    return response.json()
-
-
 # ---------------------------------------------------------------------------
 # WordPress API
 # ---------------------------------------------------------------------------
 
 
 def get_posts() -> list[dict[str, Any]]:
-    """
-    Retrieve all published VGSM posts.
-
-    WordPress paginates REST API responses, so walk through all pages.
-    Only request fields needed by the ingestion process.
-    """
+    """Retrieve all published VGSM posts."""
 
     posts: list[dict[str, Any]] = []
     page = 1
@@ -119,8 +108,6 @@ def get_posts() -> list[dict[str, Any]]:
             timeout=REQUEST_TIMEOUT,
         )
 
-        # WordPress uses HTTP 400 when the requested page is beyond the
-        # final page.
         if response.status_code == 400:
             break
 
@@ -166,13 +153,25 @@ def clean_html(value: str) -> str:
 
 def normalize_text(value: str) -> str:
     """
-    Normalize text for future guess matching.
+    Normalize text for guess matching.
 
-    Fuzzy matching and partial-credit rules intentionally live in the game
-    engine rather than the ingestion layer.
+    Unicode characters are decomposed first so names such as:
+
+        Hōsoku
+        Jūdan
+
+    become:
+
+        Hosoku
+        Judan
+
+    before punctuation and whitespace normalization.
     """
 
     value = clean_html(value).lower()
+
+    value = unicodedata.normalize("NFKD", value)
+    value = value.encode("ascii", "ignore").decode("ascii")
 
     value = value.replace("&amp;", "and")
     value = re.sub(r"[™®©]", "", value)
@@ -189,11 +188,15 @@ def normalize_text(value: str) -> str:
 IGNORED_IMAGE_PATTERNS = (
     "gravatar",
     "avatar",
-    "logo",
-    "icon",
     "favicon",
     "emoji",
     "wp-includes/images",
+)
+
+
+WORDPRESS_SIZE_PATTERN = re.compile(
+    r"-(\d{2,5})x(\d{2,5})(?=\.[^.]+$)",
+    re.IGNORECASE,
 )
 
 
@@ -210,12 +213,15 @@ def is_candidate_image_url(url: str) -> bool:
 
     lowered = url.lower()
 
-    if any(pattern in lowered for pattern in IGNORED_IMAGE_PATTERNS):
+    if any(
+        pattern in lowered
+        for pattern in IGNORED_IMAGE_PATTERNS
+    ):
         return False
 
     path = parsed.path.lower()
 
-    if path.endswith(
+    return path.endswith(
         (
             ".jpg",
             ".jpeg",
@@ -224,29 +230,90 @@ def is_candidate_image_url(url: str) -> bool:
             ".gif",
             ".avif",
         )
-    ):
-        return True
-
-    return False
+    )
 
 
-def extract_image_urls(content_html: str) -> list[str]:
+def wordpress_image_key(url: str) -> str:
     """
-    Extract article image URLs from WordPress post content.
+    Return a normalized key for a WordPress image.
 
-    Supports:
-    - normal src attributes
-    - lazy-loaded data-src attributes
-    - srcset attributes
-    - absolute and relative URLs
+    Example:
+
+        foo.jpg
+        foo-300x150.jpg
+        foo-1024x512.jpg
+
+    all become:
+
+        foo.jpg
     """
 
-    soup = BeautifulSoup(content_html, "html.parser")
+    parsed = urlparse(url)
 
-    image_urls: list[str] = []
+    path = WORDPRESS_SIZE_PATTERN.sub(
+        "",
+        parsed.path,
+    )
+
+    return f"{parsed.scheme}://{parsed.netloc}{path}"
+
+
+def parse_srcset(srcset: str) -> list[tuple[str, int]]:
+    """
+    Parse a srcset into (URL, width) pairs.
+
+    We primarily care about width because it lets us choose the largest
+    responsive image.
+    """
+
+    candidates: list[tuple[str, int]] = []
+
+    for entry in srcset.split(","):
+        parts = entry.strip().split()
+
+        if not parts:
+            continue
+
+        url = parts[0]
+        width = 0
+
+        if len(parts) > 1:
+            descriptor = parts[1]
+
+            match = re.match(
+                r"(\d+)w",
+                descriptor,
+            )
+
+            if match:
+                width = int(match.group(1))
+
+        candidates.append((url, width))
+
+    return candidates
+
+
+def extract_image_urls(
+    content_html: str,
+) -> list[dict[str, Any]]:
+    """
+    Extract logical article images.
+
+    Each HTML <img> represents one logical image. If it contains a srcset,
+    the largest candidate is selected rather than treating every responsive
+    size as a separate image.
+    """
+
+    soup = BeautifulSoup(
+        content_html,
+        "html.parser",
+    )
+
+    images: list[dict[str, Any]] = []
+    seen_keys: set[str] = set()
 
     for image in soup.find_all("img"):
-        candidates: list[str] = []
+        candidates: list[tuple[str, int]] = []
 
         for attribute in (
             "src",
@@ -257,27 +324,74 @@ def extract_image_urls(content_html: str) -> list[str]:
             value = image.get(attribute)
 
             if value:
-                candidates.append(value)
+                candidates.append(
+                    (
+                        value,
+                        0,
+                    )
+                )
 
         srcset = image.get("srcset")
 
         if srcset:
-            for entry in srcset.split(","):
-                url = entry.strip().split(" ")[0]
+            candidates.extend(
+                parse_srcset(srcset)
+            )
 
-                if url:
-                    candidates.append(url)
+        normalized_candidates: list[
+            tuple[str, int]
+        ] = []
 
-        for candidate in candidates:
-            absolute_url = urljoin(SITE_URL, candidate)
+        for candidate, width in candidates:
+            absolute_url = urljoin(
+                SITE_URL,
+                candidate,
+            )
 
-            if not is_candidate_image_url(absolute_url):
+            if not is_candidate_image_url(
+                absolute_url
+            ):
                 continue
 
-            if absolute_url not in image_urls:
-                image_urls.append(absolute_url)
+            normalized_candidates.append(
+                (
+                    absolute_url,
+                    width,
+                )
+            )
 
-    return image_urls
+        if not normalized_candidates:
+            continue
+
+        # Prefer the candidate with the greatest declared width.
+        # When widths are unavailable, the first candidate wins.
+        normalized_candidates.sort(
+            key=lambda item: item[1],
+            reverse=True,
+        )
+
+        selected_url = normalized_candidates[0][0]
+
+        key = wordpress_image_key(
+            selected_url
+        )
+
+        if key in seen_keys:
+            continue
+
+        seen_keys.add(key)
+
+        images.append(
+            {
+                "source_url": selected_url,
+                "alt": image.get(
+                    "alt",
+                    "",
+                ),
+            }
+        )
+
+    return images
 
 
 # ---------------------------------------------------------------------------
@@ -285,24 +399,39 @@ def extract_image_urls(content_html: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def post_to_game(post: dict[str, Any]) -> dict[str, Any] | None:
+def post_to_game(
+    post: dict[str, Any],
+) -> dict[str, Any] | None:
     """Convert a WordPress post into our normalized game representation."""
 
     title = clean_html(
-        post.get("title", {}).get("rendered", "")
+        post.get("title", {}).get(
+            "rendered",
+            "",
+        )
     )
 
     if not title:
         return None
 
-    content_html = post.get("content", {}).get("rendered", "")
+    content_html = post.get(
+        "content",
+        {},
+    ).get(
+        "rendered",
+        "",
+    )
 
-    image_urls = extract_image_urls(content_html)
+    images = extract_image_urls(
+        content_html
+    )
 
-    if not image_urls:
+    if not images:
         return None
 
-    normalized_name = normalize_text(title)
+    normalized_name = normalize_text(
+        title
+    )
 
     return {
         "id": f"wp-{post['id']}",
@@ -310,7 +439,9 @@ def post_to_game(post: dict[str, Any]) -> dict[str, Any] | None:
         "normalized_name": normalized_name,
         "aliases": [],
         "series": None,
-        "accept": [normalized_name],
+        "accept": [
+            normalized_name
+        ],
         "partial": [],
         "article": post.get("link"),
         "source": {
@@ -319,15 +450,25 @@ def post_to_game(post: dict[str, Any]) -> dict[str, Any] | None:
             "post_id": post.get("id"),
             "date": post.get("date"),
         },
-        "categories": post.get("categories", []),
-        "tags": post.get("tags", []),
+        "categories": post.get(
+            "categories",
+            [],
+        ),
+        "tags": post.get(
+            "tags",
+            [],
+        ),
         "images": [
             {
-                "source_url": url,
+                "source_url": image[
+                    "source_url"
+                ],
                 "path": None,
-                "alt": "",
+                "alt": image["alt"],
+                "width": None,
+                "height": None,
             }
-            for url in image_urls
+            for image in images
         ],
     }
 
@@ -357,7 +498,9 @@ def safe_extension(
     }:
         return extension
 
-    content_type = (content_type or "").lower()
+    content_type = (
+        content_type or ""
+    ).lower()
 
     extensions = {
         "image/jpeg": ".jpg",
@@ -378,11 +521,17 @@ def download_image(
     image: dict[str, Any],
     image_index: int,
 ) -> str:
-    """Download an image and return its relative local path."""
+    """Download an image and record its dimensions."""
 
-    source_url = image["source_url"]
+    source_url = image[
+        "source_url"
+    ]
 
-    print(f"    Downloading image {image_index + 1}: {source_url}")
+    print(
+        f"    Downloading image "
+        f"{image_index + 1}: "
+        f"{source_url}"
+    )
 
     response = SESSION.get(
         source_url,
@@ -393,22 +542,38 @@ def download_image(
 
     extension = safe_extension(
         source_url,
-        response.headers.get("Content-Type"),
+        response.headers.get(
+            "Content-Type"
+        ),
     )
 
     filename = (
-        f"{game['id']}-{image_index + 1}{extension}"
+        f"{game['id']}-"
+        f"{image_index + 1}"
+        f"{extension}"
     )
 
-    destination = IMAGE_DIR / filename
+    destination = (
+        IMAGE_DIR / filename
+    )
 
-    destination.write_bytes(response.content)
+    destination.write_bytes(
+        response.content
+    )
 
-    # Validate that the response really is an image.
+    # Validate the image and record its actual dimensions.
     with Image.open(destination) as downloaded:
         downloaded.verify()
 
-    return f"/assets/images/{filename}"
+    with Image.open(destination) as downloaded:
+        image["width"], image["height"] = (
+            downloaded.size
+        )
+
+    return (
+        f"/assets/images/"
+        f"{filename}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -455,8 +620,12 @@ def write_json(
 def main() -> int:
     """Run the ingestion pipeline."""
 
-    print("VGSM Guessing Game ingestion")
-    print("=============================")
+    print(
+        "VGSM Guessing Game ingestion"
+    )
+    print(
+        "============================="
+    )
 
     ensure_directories()
 
@@ -465,14 +634,20 @@ def main() -> int:
 
     except requests.RequestException as exc:
         print(
-            f"ERROR: Unable to retrieve VGSM posts: {exc}",
+            f"ERROR: Unable to retrieve VGSM "
+            f"posts: {exc}",
             file=sys.stderr,
         )
         return 1
 
-    print(f"\nDiscovered {len(posts)} posts.")
+    print(
+        f"\nDiscovered {len(posts)} posts."
+    )
 
-    candidates: list[dict[str, Any]] = []
+    candidates: list[
+        dict[str, Any]
+    ] = []
+
     skipped_no_image = 0
 
     for post in posts:
@@ -485,24 +660,24 @@ def main() -> int:
         candidates.append(game)
 
     print(
-        f"Usable posts with article images: "
-        f"{len(candidates)}"
+        "Usable posts with logical "
+        f"article images: {len(candidates)}"
     )
 
     print(
-        f"Skipped posts without article images: "
-        f"{skipped_no_image}"
+        "Skipped posts without article "
+        f"images: {skipped_no_image}"
     )
 
     if len(candidates) < SAMPLE_SIZE:
         print(
-            f"ERROR: Only {len(candidates)} usable posts found; "
-            f"need {SAMPLE_SIZE}.",
+            f"ERROR: Only {len(candidates)} "
+            f"usable posts found; need "
+            f"{SAMPLE_SIZE}.",
             file=sys.stderr,
         )
         return 1
 
-    # Select five random usable posts.
     selected = random.sample(
         candidates,
         SAMPLE_SIZE,
@@ -512,23 +687,31 @@ def main() -> int:
         f"\nSelected {len(selected)} games:\n"
     )
 
-    successful_games: list[dict[str, Any]] = []
+    successful_games: list[
+        dict[str, Any]
+    ] = []
+
     warnings: list[str] = []
 
     for game in selected:
         print(
             f"- {game['name']} "
-            f"({len(game['images'])} source image(s))"
+            f"({len(game['images'])} "
+            "logical image(s))"
         )
 
         downloaded_count = 0
 
-        for index, image in enumerate(game["images"]):
+        for index, image in enumerate(
+            game["images"]
+        ):
             try:
-                image["path"] = download_image(
-                    game,
-                    image,
-                    index,
+                image["path"] = (
+                    download_image(
+                        game,
+                        image,
+                        index,
+                    )
                 )
 
                 downloaded_count += 1
@@ -539,19 +722,23 @@ def main() -> int:
                 ValueError,
             ) as exc:
                 warning = (
-                    f"Could not download image for "
-                    f"{game['name']}: {exc}"
+                    f"Could not download "
+                    f"image for {game['name']}: "
+                    f"{exc}"
                 )
 
                 print(
                     f"    WARNING: {warning}"
                 )
 
-                warnings.append(warning)
+                warnings.append(
+                    warning
+                )
 
         if downloaded_count:
-            successful_games.append(game)
-
+            successful_games.append(
+                game
+            )
         else:
             warnings.append(
                 f"No images downloaded for "
@@ -562,7 +749,8 @@ def main() -> int:
         "schema_version": 1,
         "source": {
             "name": (
-                "Video Game Soda Machine Project"
+                "Video Game Soda Machine "
+                "Project"
             ),
             "url": SITE_URL,
         },
@@ -575,7 +763,9 @@ def main() -> int:
         "discovered_posts": len(posts),
         "usable_posts": len(candidates),
         "requested_samples": SAMPLE_SIZE,
-        "successful_games": len(successful_games),
+        "successful_games": len(
+            successful_games
+        ),
         "skipped_posts_without_images": (
             skipped_no_image
         ),
@@ -602,7 +792,9 @@ def main() -> int:
             f"{len(warnings)} warning(s)."
         )
     else:
-        print("\nCompleted successfully.")
+        print(
+            "\nCompleted successfully."
+        )
 
     return 0
 
