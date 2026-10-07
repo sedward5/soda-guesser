@@ -115,6 +115,20 @@ function dateDifferenceInDays(
   );
 }
 
+function addDays(
+  dateKey,
+  amount,
+) {
+  const date =
+    new Date(`${dateKey}T00:00:00`);
+
+  date.setDate(
+    date.getDate() + amount,
+  );
+
+  return localDateKey(date);
+}
+
 function dailyIndex(
   dateKey,
   count,
@@ -216,6 +230,485 @@ function clearCurrentState() {
   } catch {
     // Ignore storage failures.
   }
+}
+
+
+/* -------------------------------------------------------------------------- */
+/* Daily statistics                                                           */
+/* -------------------------------------------------------------------------- */
+
+function statsStorageKey() {
+  return `${STORAGE_PREFIX}:stats`;
+}
+
+function loadStats() {
+  try {
+    const saved =
+      JSON.parse(
+        localStorage.getItem(
+          statsStorageKey(),
+        ) || "{}",
+      );
+
+    if (
+      !saved ||
+      typeof saved !== "object" ||
+      Array.isArray(saved)
+    ) {
+      return {};
+    }
+
+    return saved;
+  } catch {
+    return {};
+  }
+}
+
+function saveStats(stats) {
+  try {
+    localStorage.setItem(
+      statsStorageKey(),
+      JSON.stringify(stats),
+    );
+  } catch {
+    // Local storage is optional.
+  }
+}
+
+function recordDailyResult() {
+  if (
+    mode !== "daily" ||
+    !puzzle ||
+    !finished
+  ) {
+    return;
+  }
+
+  const date =
+    localDateKey();
+
+  const stats =
+    loadStats();
+
+  // A result for a date is immutable. This prevents refreshing
+  // or reopening the completed game from counting it twice.
+  if (stats[date]) {
+    return;
+  }
+
+  stats[date] = {
+    puzzleId:
+      puzzle.id || null,
+    won,
+    guesses:
+      won
+        ? guesses.length
+        : MAX_GUESSES,
+  };
+
+  saveStats(stats);
+}
+
+function completedDailyResults() {
+  const stats =
+    loadStats();
+
+  return Object.entries(stats)
+    .map(
+      ([date, result]) => ({
+        date,
+        ...result,
+      }),
+    )
+    .filter(
+      result =>
+        result &&
+        typeof result.date ===
+          "string" &&
+        typeof result.won ===
+          "boolean",
+    )
+    .sort(
+      (first, second) =>
+        first.date.localeCompare(
+          second.date,
+        ),
+    );
+}
+
+function calculateStats() {
+  const results =
+    completedDailyResults();
+
+  const played =
+    results.length;
+
+  const wins =
+    results.filter(
+      result => result.won,
+    ).length;
+
+  const losses =
+    played - wins;
+
+  const distribution =
+    Array(MAX_GUESSES).fill(0);
+
+  results.forEach(
+    result => {
+      if (!result.won) {
+        return;
+      }
+
+      const count =
+        Number(result.guesses);
+
+      if (
+        Number.isInteger(count) &&
+        count >= 1 &&
+        count <= MAX_GUESSES
+      ) {
+        distribution[
+          count - 1
+        ] += 1;
+      }
+    },
+  );
+
+  /*
+   * Current streak:
+   *
+   * If today's game has been completed, start today.
+   * Otherwise start yesterday. This means opening Stats
+   * before playing today's game doesn't unnecessarily
+   * destroy yesterday's streak.
+   */
+  const resultByDate =
+    new Map(
+      results.map(
+        result => [
+          result.date,
+          result,
+        ],
+      ),
+    );
+
+  const today =
+    localDateKey();
+
+  const startDate =
+    resultByDate.has(today)
+      ? today
+      : addDays(today, -1);
+
+  let currentStreak = 0;
+  let cursor = startDate;
+
+  while (true) {
+    const result =
+      resultByDate.get(cursor);
+
+    if (
+      !result ||
+      !result.won
+    ) {
+      break;
+    }
+
+    currentStreak += 1;
+    cursor =
+      addDays(cursor, -1);
+  }
+
+  /*
+   * Best streak across all recorded daily results.
+   */
+  let bestStreak = 0;
+  let runningStreak = 0;
+  let previousDate = null;
+
+  results.forEach(result => {
+    if (
+      !result.won
+    ) {
+      runningStreak = 0;
+      previousDate = null;
+      return;
+    }
+
+    if (
+      previousDate &&
+      dateDifferenceInDays(
+        previousDate,
+        result.date,
+      ) === 1
+    ) {
+      runningStreak += 1;
+    } else {
+      runningStreak = 1;
+    }
+
+    bestStreak =
+      Math.max(
+        bestStreak,
+        runningStreak,
+      );
+
+    previousDate =
+      result.date;
+  });
+
+  return {
+    played,
+    wins,
+    losses,
+    winRate:
+      played
+        ? Math.round(
+            (wins / played) * 100,
+          )
+        : 0,
+    currentStreak,
+    bestStreak,
+    distribution,
+  };
+}
+
+
+/* -------------------------------------------------------------------------- */
+/* Stats UI                                                                   */
+/* -------------------------------------------------------------------------- */
+
+function createStatsUI() {
+  const headerActions =
+    document.querySelector(
+      ".header-actions",
+    );
+
+  if (!headerActions) {
+    return;
+  }
+
+  /*
+   * The stats button is created here rather than requiring another
+   * HTML change. It naturally sits between Help and Report.
+   */
+  const statsButton =
+    document.createElement(
+      "button",
+    );
+
+  statsButton.className =
+    "icon-button stats-icon-button";
+
+  statsButton.id =
+    "stats-button";
+
+  statsButton.type =
+    "button";
+
+  statsButton.setAttribute(
+    "aria-label",
+    "Statistics",
+  );
+
+  statsButton.title =
+    "Statistics";
+
+  statsButton.textContent =
+    "▥";
+
+  headerActions.insertBefore(
+    statsButton,
+    elements.report,
+  );
+
+  const statsDialog =
+    document.createElement(
+      "dialog",
+    );
+
+  statsDialog.id =
+    "stats-dialog";
+
+  statsDialog.innerHTML = `
+    <div class="dialog-inner">
+
+      <button
+        class="dialog-close"
+        id="stats-close"
+        type="button"
+        aria-label="Close"
+      >
+        ×
+      </button>
+
+      <p class="eyebrow">
+        Your statistics
+      </p>
+
+      <h2>
+        Daily Games
+      </h2>
+
+      <div
+        class="stats-summary"
+        id="stats-summary"
+      ></div>
+
+      <div
+        class="stats-distribution"
+        id="stats-distribution"
+      ></div>
+
+      <p class="dialog-small">
+        Statistics are saved only in this browser.
+        Free Play games are not included.
+      </p>
+
+    </div>
+  `;
+
+  document.body.appendChild(
+    statsDialog,
+  );
+
+  const statsClose =
+    statsDialog.querySelector(
+      "#stats-close",
+    );
+
+  statsButton.addEventListener(
+    "click",
+    () => {
+      renderStats();
+      statsDialog.showModal();
+    },
+  );
+
+  statsClose.addEventListener(
+    "click",
+    () =>
+      statsDialog.close(),
+  );
+
+  statsDialog.addEventListener(
+    "click",
+    event => {
+      if (
+        event.target ===
+        statsDialog
+      ) {
+        statsDialog.close();
+      }
+    },
+  );
+
+  return {
+    button: statsButton,
+    dialog: statsDialog,
+    summary:
+      statsDialog.querySelector(
+        "#stats-summary",
+      ),
+    distribution:
+      statsDialog.querySelector(
+        "#stats-distribution",
+      ),
+  };
+}
+
+let statsUI = null;
+
+function renderStats() {
+  if (!statsUI) {
+    return;
+  }
+
+  const stats =
+    calculateStats();
+
+  statsUI.summary.innerHTML = `
+    <div class="stats-stat">
+      <strong>${stats.played}</strong>
+      <span>Played</span>
+    </div>
+
+    <div class="stats-stat">
+      <strong>${stats.winRate}%</strong>
+      <span>Win rate</span>
+    </div>
+
+    <div class="stats-stat">
+      <strong>${stats.currentStreak}</strong>
+      <span>Current streak</span>
+    </div>
+
+    <div class="stats-stat">
+      <strong>${stats.bestStreak}</strong>
+      <span>Best streak</span>
+    </div>
+  `;
+
+  const maxDistribution =
+    Math.max(
+      ...stats.distribution,
+      1,
+    );
+
+  statsUI.distribution.innerHTML = `
+    <h3>
+      Guess distribution
+    </h3>
+  `;
+
+  stats.distribution?.forEach?.(() => {});
+
+  stats.distribution.forEach(
+    (count, index) => {
+      const row =
+        document.createElement(
+          "div",
+        );
+
+      row.className =
+        "stats-distribution-row";
+
+      const guessNumber =
+        index + 1;
+
+      const percentage =
+        count === 0
+          ? 0
+          : Math.max(
+              8,
+              Math.round(
+                (count /
+                  maxDistribution) *
+                  100,
+              ),
+            );
+
+      row.innerHTML = `
+        <span class="stats-distribution-number">
+          ${guessNumber}
+        </span>
+
+        <div class="stats-bar-track">
+          <div
+            class="stats-bar"
+            style="width: ${percentage}%"
+          >
+            <span>${count}</span>
+          </div>
+        </div>
+      `;
+
+      statsUI.distribution.appendChild(
+        row,
+      );
+    },
+  );
 }
 
 
@@ -965,6 +1458,10 @@ function finishGame(success) {
   updateReportDialog();
 
   saveState();
+
+  // Only completed Daily games become statistics.
+  recordDailyResult();
+
   renderGuesses();
 }
 
@@ -1792,5 +2289,8 @@ window.addEventListener(
 /* -------------------------------------------------------------------------- */
 /* Boot                                                                       */
 /* -------------------------------------------------------------------------- */
+
+statsUI =
+  createStatsUI();
 
 loadGame();
