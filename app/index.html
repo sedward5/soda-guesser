@@ -21,7 +21,7 @@
   <title>Pop Quiz — Video Game Guessing Game</title>
 
   <!-- Bump this version whenever CSS/JS changes during development. -->
-  <link rel="stylesheet" href="styles.css?v=6">
+  <link rel="stylesheet" href="styles.css?v=7">
 </head>
 
 <body>
@@ -67,12 +67,12 @@
         class="mode-label"
         id="mode-label"
       >
-        Today's Game
+        Daily puzzle
       </span>
 
       <button
         class="mode-button"
-        id="free-play-button"
+        id="free-play"
         type="button"
       >
         Free Play
@@ -96,18 +96,19 @@
         <div
           class="image-placeholder"
           id="image-placeholder"
+          aria-hidden="true"
         >
           Loading…
         </div>
       </div>
 
       <div class="status-row">
-        <span id="progress-label">
-          Guess 1 of 6
+        <span id="progress">
+          0 / 6
         </span>
 
-        <span id="clarity-label">
-          Very pixelated
+        <span id="clarity">
+          Very blurry
         </span>
       </div>
 
@@ -133,8 +134,8 @@
             enterkeyhint="send"
             maxlength="80"
             placeholder="Name that game…"
-            aria-describedby="guess-message"
-            aria-controls="guess-suggestions"
+            aria-describedby="game-message"
+            aria-controls="suggestions"
             aria-autocomplete="list"
             spellcheck="false"
             autocomplete="off"
@@ -144,7 +145,7 @@
           >
 
           <div
-            id="guess-suggestions"
+            id="suggestions"
             class="suggestions"
             role="listbox"
             aria-label="Game suggestions"
@@ -163,7 +164,7 @@
 
       <p
         class="message"
-        id="guess-message"
+        id="game-message"
         role="status"
         aria-live="polite"
       ></p>
@@ -201,7 +202,7 @@
     </section>
 
     <footer class="game-footer">
-      <span id="date-label"></span>
+      <span id="puzzle-date"></span>
 
       <span aria-hidden="true">
         •
@@ -218,6 +219,7 @@
 
   </main>
 
+
   <!-- --------------------------------------------------------------------- -->
   <!-- How to play                                                           -->
   <!-- --------------------------------------------------------------------- -->
@@ -227,7 +229,7 @@
 
       <button
         class="dialog-close"
-        id="help-close"
+        id="close-help"
         type="button"
         aria-label="Close"
       >
@@ -268,11 +270,13 @@
       </p>
 
       <p class="dialog-small">
-        Your progress is saved in this browser.
+        Your daily progress and statistics are saved
+        in this browser. Free Play is not tracked.
       </p>
 
     </div>
   </dialog>
+
 
   <!-- --------------------------------------------------------------------- -->
   <!-- Report puzzle                                                         -->
@@ -283,7 +287,7 @@
 
       <button
         class="dialog-close"
-        id="report-close"
+        id="close-report"
         type="button"
         aria-label="Close"
       >
@@ -299,8 +303,9 @@
       </h2>
 
       <p>
-        Let us know if the image is broken, belongs to a different game,
-        or there is another problem with this puzzle.
+        Let us know if the image is broken, belongs
+        to a different game, or there is another
+        problem with this puzzle.
       </p>
 
       <div class="report-puzzle-id">
@@ -314,8 +319,8 @@
       </div>
 
       <p class="dialog-small">
-        This ID helps us find the exact source record. It does not reveal
-        the answer to the puzzle.
+        This ID helps us find the exact source record.
+        It does not reveal the answer to the puzzle.
       </p>
 
       <a
@@ -331,7 +336,8 @@
     </div>
   </dialog>
 
+
   <!-- Bump this version whenever JS changes during development. -->
-  <script src="game.js?v=6"></script>
+  <script src="game.js?v=7"></script>
 </body>
 </html>

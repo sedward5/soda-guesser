@@ -1,49 +1,38 @@
 const MAX_GUESSES = 6;
 const STORAGE_PREFIX = "pop-quiz-v2";
-
-// The first game in games.json is played on this date.
-// Games then advance sequentially through the dataset and loop.
 const DAILY_EPOCH = "2026-10-06";
-
 const GITHUB_ISSUE_URL =
   "https://github.com/sedward5/soda-guesser/issues/new";
 
 const elements = {
   canvas: document.querySelector("#game-canvas"),
-  imageFrame: document.querySelector("#image-frame"),
-  placeholder: document.querySelector("#image-placeholder"),
   form: document.querySelector("#guess-form"),
   input: document.querySelector("#guess-input"),
   button: document.querySelector("#guess-button"),
-  message: document.querySelector("#guess-message"),
+  message: document.querySelector("#game-message"),
   guesses: document.querySelector("#guesses"),
-  progress: document.querySelector("#progress-label"),
-  clarity: document.querySelector("#clarity-label"),
+  progress: document.querySelector("#progress"),
+  clarity: document.querySelector("#clarity"),
   result: document.querySelector("#result"),
   resultKicker: document.querySelector("#result-kicker"),
   resultTitle: document.querySelector("#result-title"),
   resultDetail: document.querySelector("#result-detail"),
   share: document.querySelector("#share-button"),
-  date: document.querySelector("#date-label"),
-
-  help: document.querySelector("#help-button"),
-  dialog: document.querySelector("#help-dialog"),
-  helpClose: document.querySelector("#help-close"),
-
-  report: document.querySelector("#report-button"),
+  date: document.querySelector("#puzzle-date"),
+  helpButton: document.querySelector("#help-button"),
+  helpDialog: document.querySelector("#help-dialog"),
+  closeHelp: document.querySelector("#close-help"),
+  reportButton: document.querySelector("#report-button"),
   reportDialog: document.querySelector("#report-dialog"),
-  reportClose: document.querySelector("#report-close"),
+  closeReport: document.querySelector("#close-report"),
   reportPuzzleId: document.querySelector("#report-puzzle-id"),
   reportIssueLink: document.querySelector("#report-issue-link"),
-
-  freePlay: document.querySelector("#free-play-button"),
+  freePlay: document.querySelector("#free-play"),
   modeLabel: document.querySelector("#mode-label"),
-
-  suggestions: document.querySelector("#guess-suggestions"),
+  suggestions: document.querySelector("#suggestions"),
 };
 
-const ctx =
-  elements.canvas.getContext("2d");
+const ctx = elements.canvas.getContext("2d");
 
 let games = [];
 let puzzle = null;
@@ -52,14 +41,31 @@ let guesses = [];
 let finished = false;
 let won = false;
 let mode = "daily";
+let suggestionNames = [];
 
 
 /* -------------------------------------------------------------------------- */
-/* Normalization                                                              */
+/* Utility                                                                     */
 /* -------------------------------------------------------------------------- */
+
+function decodeHtmlEntities(value) {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.innerHTML = String(value);
+  return textarea.value;
+}
+
+
+function displayGameName(game) {
+  return decodeHtmlEntities(game?.name || "");
+}
+
 
 function normalize(value) {
-  return value
+  return decodeHtmlEntities(String(value ?? ""))
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
@@ -69,651 +75,29 @@ function normalize(value) {
     .replace(/\s+/g, " ");
 }
 
+
 function normalizedTokens(value) {
-  return normalize(value)
-    .split(" ")
-    .filter(Boolean);
+  return normalize(value).split(" ").filter(Boolean);
 }
+
 
 function compactCharacters(value) {
-  return normalize(value).replace(/ /g, "");
+  return normalize(value).replace(/\s/g, "");
+}
+
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 
 /* -------------------------------------------------------------------------- */
-/* Date / daily puzzle                                                        */
-/* -------------------------------------------------------------------------- */
-
-function localDateKey(date = new Date()) {
-  const year =
-    date.getFullYear();
-
-  const month =
-    String(date.getMonth() + 1)
-      .padStart(2, "0");
-
-  const day =
-    String(date.getDate())
-      .padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
-}
-
-function dateDifferenceInDays(
-  fromDate,
-  toDate,
-) {
-  const from =
-    new Date(`${fromDate}T00:00:00`);
-
-  const to =
-    new Date(`${toDate}T00:00:00`);
-
-  return Math.floor(
-    (to - from) /
-      (1000 * 60 * 60 * 24),
-  );
-}
-
-function addDays(
-  dateKey,
-  amount,
-) {
-  const date =
-    new Date(`${dateKey}T00:00:00`);
-
-  date.setDate(
-    date.getDate() + amount,
-  );
-
-  return localDateKey(date);
-}
-
-function dailyIndex(
-  dateKey,
-  count,
-) {
-  if (!count) return 0;
-
-  const daysSinceEpoch =
-    dateDifferenceInDays(
-      DAILY_EPOCH,
-      dateKey,
-    );
-
-  return (
-    (daysSinceEpoch % count) +
-    count
-  ) % count;
-}
-
-
-/* -------------------------------------------------------------------------- */
-/* State                                                                      */
-/* -------------------------------------------------------------------------- */
-
-function storageKey() {
-  if (mode === "free") {
-    return `${STORAGE_PREFIX}:free`;
-  }
-
-  return (
-    `${STORAGE_PREFIX}:daily:` +
-    localDateKey()
-  );
-}
-
-function saveState() {
-  try {
-    localStorage.setItem(
-      storageKey(),
-      JSON.stringify({
-        puzzleId:
-          puzzle?.id || null,
-        guesses,
-        finished,
-        won,
-      }),
-    );
-  } catch {
-    // Local storage is optional.
-  }
-}
-
-function loadState() {
-  try {
-    const saved =
-      JSON.parse(
-        localStorage.getItem(
-          storageKey(),
-        ) || "null",
-      );
-
-    if (!saved) return false;
-
-    // Don't accidentally restore Free Play state against
-    // a different randomly selected puzzle.
-    if (
-      mode === "free" &&
-      saved.puzzleId &&
-      saved.puzzleId !== puzzle?.id
-    ) {
-      return false;
-    }
-
-    guesses =
-      Array.isArray(saved.guesses)
-        ? saved.guesses
-        : [];
-
-    finished =
-      Boolean(saved.finished);
-
-    won =
-      Boolean(saved.won);
-
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function clearCurrentState() {
-  guesses = [];
-  finished = false;
-  won = false;
-
-  try {
-    localStorage.removeItem(
-      storageKey(),
-    );
-  } catch {
-    // Ignore storage failures.
-  }
-}
-
-
-/* -------------------------------------------------------------------------- */
-/* Daily statistics                                                           */
-/* -------------------------------------------------------------------------- */
-
-function statsStorageKey() {
-  return `${STORAGE_PREFIX}:stats`;
-}
-
-function loadStats() {
-  try {
-    const saved =
-      JSON.parse(
-        localStorage.getItem(
-          statsStorageKey(),
-        ) || "{}",
-      );
-
-    if (
-      !saved ||
-      typeof saved !== "object" ||
-      Array.isArray(saved)
-    ) {
-      return {};
-    }
-
-    return saved;
-  } catch {
-    return {};
-  }
-}
-
-function saveStats(stats) {
-  try {
-    localStorage.setItem(
-      statsStorageKey(),
-      JSON.stringify(stats),
-    );
-  } catch {
-    // Local storage is optional.
-  }
-}
-
-function recordDailyResult() {
-  if (
-    mode !== "daily" ||
-    !puzzle ||
-    !finished
-  ) {
-    return;
-  }
-
-  const date =
-    localDateKey();
-
-  const stats =
-    loadStats();
-
-  // A result for a date is immutable. This prevents refreshing
-  // or reopening the completed game from counting it twice.
-  if (stats[date]) {
-    return;
-  }
-
-  stats[date] = {
-    puzzleId:
-      puzzle.id || null,
-    won,
-    guesses:
-      won
-        ? guesses.length
-        : MAX_GUESSES,
-  };
-
-  saveStats(stats);
-}
-
-function completedDailyResults() {
-  const stats =
-    loadStats();
-
-  return Object.entries(stats)
-    .map(
-      ([date, result]) => ({
-        date,
-        ...result,
-      }),
-    )
-    .filter(
-      result =>
-        result &&
-        typeof result.date ===
-          "string" &&
-        typeof result.won ===
-          "boolean",
-    )
-    .sort(
-      (first, second) =>
-        first.date.localeCompare(
-          second.date,
-        ),
-    );
-}
-
-function calculateStats() {
-  const results =
-    completedDailyResults();
-
-  const played =
-    results.length;
-
-  const wins =
-    results.filter(
-      result => result.won,
-    ).length;
-
-  const losses =
-    played - wins;
-
-  const distribution =
-    Array(MAX_GUESSES).fill(0);
-
-  results.forEach(
-    result => {
-      if (!result.won) {
-        return;
-      }
-
-      const count =
-        Number(result.guesses);
-
-      if (
-        Number.isInteger(count) &&
-        count >= 1 &&
-        count <= MAX_GUESSES
-      ) {
-        distribution[
-          count - 1
-        ] += 1;
-      }
-    },
-  );
-
-  /*
-   * Current streak:
-   *
-   * If today's game has been completed, start today.
-   * Otherwise start yesterday. This means opening Stats
-   * before playing today's game doesn't unnecessarily
-   * destroy yesterday's streak.
-   */
-  const resultByDate =
-    new Map(
-      results.map(
-        result => [
-          result.date,
-          result,
-        ],
-      ),
-    );
-
-  const today =
-    localDateKey();
-
-  const startDate =
-    resultByDate.has(today)
-      ? today
-      : addDays(today, -1);
-
-  let currentStreak = 0;
-  let cursor = startDate;
-
-  while (true) {
-    const result =
-      resultByDate.get(cursor);
-
-    if (
-      !result ||
-      !result.won
-    ) {
-      break;
-    }
-
-    currentStreak += 1;
-    cursor =
-      addDays(cursor, -1);
-  }
-
-  /*
-   * Best streak across all recorded daily results.
-   */
-  let bestStreak = 0;
-  let runningStreak = 0;
-  let previousDate = null;
-
-  results.forEach(result => {
-    if (
-      !result.won
-    ) {
-      runningStreak = 0;
-      previousDate = null;
-      return;
-    }
-
-    if (
-      previousDate &&
-      dateDifferenceInDays(
-        previousDate,
-        result.date,
-      ) === 1
-    ) {
-      runningStreak += 1;
-    } else {
-      runningStreak = 1;
-    }
-
-    bestStreak =
-      Math.max(
-        bestStreak,
-        runningStreak,
-      );
-
-    previousDate =
-      result.date;
-  });
-
-  return {
-    played,
-    wins,
-    losses,
-    winRate:
-      played
-        ? Math.round(
-            (wins / played) * 100,
-          )
-        : 0,
-    currentStreak,
-    bestStreak,
-    distribution,
-  };
-}
-
-
-/* -------------------------------------------------------------------------- */
-/* Stats UI                                                                   */
-/* -------------------------------------------------------------------------- */
-
-function createStatsUI() {
-  const headerActions =
-    document.querySelector(
-      ".header-actions",
-    );
-
-  if (!headerActions) {
-    return;
-  }
-
-  /*
-   * The stats button is created here rather than requiring another
-   * HTML change. It naturally sits between Help and Report.
-   */
-  const statsButton =
-    document.createElement(
-      "button",
-    );
-
-  statsButton.className =
-    "icon-button stats-icon-button";
-
-  statsButton.id =
-    "stats-button";
-
-  statsButton.type =
-    "button";
-
-  statsButton.setAttribute(
-    "aria-label",
-    "Statistics",
-  );
-
-  statsButton.title =
-    "Statistics";
-
-  statsButton.textContent =
-    "▥";
-
-  headerActions.insertBefore(
-    statsButton,
-    elements.report,
-  );
-
-  const statsDialog =
-    document.createElement(
-      "dialog",
-    );
-
-  statsDialog.id =
-    "stats-dialog";
-
-  statsDialog.innerHTML = `
-    <div class="dialog-inner">
-
-      <button
-        class="dialog-close"
-        id="stats-close"
-        type="button"
-        aria-label="Close"
-      >
-        ×
-      </button>
-
-      <p class="eyebrow">
-        Your statistics
-      </p>
-
-      <h2>
-        Daily Games
-      </h2>
-
-      <div
-        class="stats-summary"
-        id="stats-summary"
-      ></div>
-
-      <div
-        class="stats-distribution"
-        id="stats-distribution"
-      ></div>
-
-      <p class="dialog-small">
-        Statistics are saved only in this browser.
-        Free Play games are not included.
-      </p>
-
-    </div>
-  `;
-
-  document.body.appendChild(
-    statsDialog,
-  );
-
-  const statsClose =
-    statsDialog.querySelector(
-      "#stats-close",
-    );
-
-  statsButton.addEventListener(
-    "click",
-    () => {
-      renderStats();
-      statsDialog.showModal();
-    },
-  );
-
-  statsClose.addEventListener(
-    "click",
-    () =>
-      statsDialog.close(),
-  );
-
-  statsDialog.addEventListener(
-    "click",
-    event => {
-      if (
-        event.target ===
-        statsDialog
-      ) {
-        statsDialog.close();
-      }
-    },
-  );
-
-  return {
-    button: statsButton,
-    dialog: statsDialog,
-    summary:
-      statsDialog.querySelector(
-        "#stats-summary",
-      ),
-    distribution:
-      statsDialog.querySelector(
-        "#stats-distribution",
-      ),
-  };
-}
-
-let statsUI = null;
-
-function renderStats() {
-  if (!statsUI) {
-    return;
-  }
-
-  const stats =
-    calculateStats();
-
-  statsUI.summary.innerHTML = `
-    <div class="stats-stat">
-      <strong>${stats.played}</strong>
-      <span>Played</span>
-    </div>
-
-    <div class="stats-stat">
-      <strong>${stats.winRate}%</strong>
-      <span>Win rate</span>
-    </div>
-
-    <div class="stats-stat">
-      <strong>${stats.currentStreak}</strong>
-      <span>Current streak</span>
-    </div>
-
-    <div class="stats-stat">
-      <strong>${stats.bestStreak}</strong>
-      <span>Best streak</span>
-    </div>
-  `;
-
-  const maxDistribution =
-    Math.max(
-      ...stats.distribution,
-      1,
-    );
-
-  statsUI.distribution.innerHTML = `
-    <h3>
-      Guess distribution
-    </h3>
-  `;
-
-  stats.distribution?.forEach?.(() => {});
-
-  stats.distribution.forEach(
-    (count, index) => {
-      const row =
-        document.createElement(
-          "div",
-        );
-
-      row.className =
-        "stats-distribution-row";
-
-      const guessNumber =
-        index + 1;
-
-      const percentage =
-        count === 0
-          ? 0
-          : Math.max(
-              8,
-              Math.round(
-                (count /
-                  maxDistribution) *
-                  100,
-              ),
-            );
-
-      row.innerHTML = `
-        <span class="stats-distribution-number">
-          ${guessNumber}
-        </span>
-
-        <div class="stats-bar-track">
-          <div
-            class="stats-bar"
-            style="width: ${percentage}%"
-          >
-            <span>${count}</span>
-          </div>
-        </div>
-      `;
-
-      statsUI.distribution.appendChild(
-        row,
-      );
-    },
-  );
-}
-
-
-/* -------------------------------------------------------------------------- */
-/* Answer matching                                                            */
+/* Game matching                                                               */
 /* -------------------------------------------------------------------------- */
 
 function answerNames(game) {
@@ -726,383 +110,659 @@ function answerNames(game) {
     .filter(Boolean);
 }
 
-function hasMeaningfulWordOverlap(
-  first,
-  second,
-) {
-  const firstTokens =
-    normalizedTokens(first);
 
-  const secondTokens =
-    normalizedTokens(second);
+function findGameForGuess(value) {
+  const normalized = normalize(value);
 
-  if (
-    !firstTokens.length ||
-    !secondTokens.length
-  ) {
-    return false;
+  if (!normalized) {
+    return null;
   }
 
-  const secondSet =
-    new Set(secondTokens);
-
-  const sharedWords =
-    firstTokens.filter(
-      token =>
-        secondSet.has(token),
-    );
-
-  if (!sharedWords.length) {
-    return false;
-  }
-
-  const meaningful =
-    sharedWords.filter(
-      token => token.length >= 3,
-    );
-
-  return meaningful.length > 0;
-}
-
-function hasStrongPrefixOverlap(
-  first,
-  second,
-) {
-  const firstTokens =
-    normalizedTokens(first);
-
-  const secondTokens =
-    normalizedTokens(second);
-
-  if (
-    !firstTokens.length ||
-    !secondTokens.length
-  ) {
-    return false;
-  }
-
-  const shorter =
-    firstTokens.length <=
-    secondTokens.length
-      ? firstTokens
-      : secondTokens;
-
-  const longer =
-    firstTokens.length <=
-    secondTokens.length
-      ? secondTokens
-      : firstTokens;
-
-  if (
-    shorter.length >
-    longer.length
-  ) {
-    return false;
-  }
-
-  for (
-    let index = 0;
-    index < shorter.length;
-    index += 1
-  ) {
-    if (
-      shorter[index] !==
-      longer[index]
-    ) {
-      return false;
-    }
-  }
-
-  return shorter.some(
-    token => token.length >= 4,
+  // Prefer an exact match against the actual catalog title.
+  const exactName = games.find(
+    (game) => normalize(game.name) === normalized,
   );
-}
 
-function levenshteinDistance(
-  first,
-  second,
-) {
-  const a =
-    compactCharacters(first);
-
-  const b =
-    compactCharacters(second);
-
-  if (!a.length) return b.length;
-  if (!b.length) return a.length;
-
-  const previous =
-    Array.from(
-      {
-        length:
-          b.length + 1,
-      },
-      (_, index) => index,
-    );
-
-  for (
-    let i = 1;
-    i <= a.length;
-    i += 1
-  ) {
-    const current = [i];
-
-    for (
-      let j = 1;
-      j <= b.length;
-      j += 1
-    ) {
-      const insertion =
-        current[j - 1] + 1;
-
-      const deletion =
-        previous[j] + 1;
-
-      const substitution =
-        previous[j - 1] +
-        (
-          a[i - 1] === b[j - 1]
-            ? 0
-            : 1
-        );
-
-      current.push(
-        Math.min(
-          insertion,
-          deletion,
-          substitution,
-        ),
-      );
-    }
-
-    for (
-      let j = 0;
-      j < current.length;
-      j += 1
-    ) {
-      previous[j] =
-        current[j];
-    }
+  if (exactName) {
+    return exactName;
   }
 
-  return previous[b.length];
-}
-
-function editSimilarity(
-  first,
-  second,
-) {
-  const a =
-    compactCharacters(first);
-
-  const b =
-    compactCharacters(second);
-
-  if (
-    !a.length ||
-    !b.length
-  ) {
-    return 0;
-  }
-
-  const distance =
-    levenshteinDistance(
-      a,
-      b,
-    );
-
-  const longest =
-    Math.max(
-      a.length,
-      b.length,
-    );
-
+  // Then allow aliases / accepted names.
   return (
-    1 -
-    distance / longest
+    games.find((game) => answerNames(game).includes(normalized)) ||
+    null
   );
 }
 
-function isPartialMatch(
-  guess,
-  game,
-) {
-  const normalizedGuess =
-    normalize(guess);
 
-  if (!normalizedGuess) {
-    return false;
+function sourceUrlForGame(game) {
+  const url = game?.source?.url;
+
+  if (
+    typeof url !== "string" ||
+    !/^https?:\/\//i.test(url)
+  ) {
+    return null;
   }
 
-  return answerNames(game).some(
-    answer => {
-      if (
-        normalizedGuess ===
-        answer
-      ) {
-        return false;
-      }
-
-      const guessLength =
-        compactCharacters(
-          normalizedGuess,
-        ).length;
-
-      const answerLength =
-        compactCharacters(
-          answer,
-        ).length;
-
-      // Short answers need much stronger evidence.
-      //
-      // This prevents:
-      //
-      //   Reel
-      //   Pokémon FireRed
-      //
-      // from becoming a false partial.
-      if (
-        Math.min(
-          guessLength,
-          answerLength,
-        ) < 5
-      ) {
-        return (
-          hasMeaningfulWordOverlap(
-            normalizedGuess,
-            answer,
-          ) ||
-          hasStrongPrefixOverlap(
-            normalizedGuess,
-            answer,
-          )
-        );
-      }
-
-      if (
-        hasMeaningfulWordOverlap(
-          normalizedGuess,
-          answer,
-        )
-      ) {
-        return true;
-      }
-
-      if (
-        hasStrongPrefixOverlap(
-          normalizedGuess,
-          answer,
-        )
-      ) {
-        return true;
-      }
-
-      return (
-        Math.min(
-          guessLength,
-          answerLength,
-        ) >= 6 &&
-        editSimilarity(
-          normalizedGuess,
-          answer,
-        ) >= 0.72
-      );
-    },
-  );
+  return url;
 }
+
+
+function createExternalLinkIcon() {
+  const svg = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "svg",
+  );
+
+  svg.setAttribute("viewBox", "0 0 16 16");
+  svg.setAttribute("aria-hidden", "true");
+  svg.classList.add("external-link-icon");
+
+  const box = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "path",
+  );
+
+  box.setAttribute(
+    "d",
+    "M5 3H3.5A1.5 1.5 0 0 0 2 4.5v8A1.5 1.5 0 0 0 3.5 14h8a1.5 1.5 0 0 0 1.5-1.5V11",
+  );
+
+  const arrow = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "path",
+  );
+
+  arrow.setAttribute(
+    "d",
+    "M9 2h5v5M14 2 7 9",
+  );
+
+  svg.append(box, arrow);
+
+  return svg;
+}
+
+
+function createSourceLink(
+  game,
+  className = "game-source-link",
+) {
+  const url = sourceUrlForGame(game);
+
+  if (!url) {
+    return null;
+  }
+
+  const link = document.createElement("a");
+
+  link.className = className;
+  link.href = url;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.title =
+    "View this game on the Video Game Soda Machine Project";
+  link.setAttribute(
+    "aria-label",
+    `View ${displayGameName(game)} on the Video Game Soda Machine Project`,
+  );
+
+  link.append(createExternalLinkIcon());
+
+  return link;
+}
+
+
+function renderResultTitle(game) {
+  elements.resultTitle.replaceChildren();
+
+  const name = document.createTextNode(
+    displayGameName(game),
+  );
+
+  elements.resultTitle.append(name);
+
+  const sourceLink = createSourceLink(
+    game,
+    "result-source-link",
+  );
+
+  if (sourceLink) {
+    elements.resultTitle.append(
+      document.createTextNode(" "),
+      sourceLink,
+    );
+  }
+}
+
+
+/* -------------------------------------------------------------------------- */
+/* Guess scoring                                                               */
+/* -------------------------------------------------------------------------- */
 
 function guessStatus(value) {
-  const normalized =
-    normalize(value);
+  const guess = normalize(value);
+  const names = answerNames(puzzle);
 
-  if (
-    answerNames(puzzle).includes(
-      normalized,
-    )
-  ) {
-    return "correct";
+  if (names.includes(guess)) {
+    return "exact";
   }
 
-  if (
-    isPartialMatch(
-      normalized,
-      puzzle,
-    )
-  ) {
-    return "partial";
+  const guessCompact = compactCharacters(value);
+
+  if (!guessCompact) {
+    return "wrong";
+  }
+
+  for (const answer of names) {
+    const answerCompact = compactCharacters(answer);
+
+    if (
+      answerCompact.includes(guessCompact) ||
+      guessCompact.includes(answerCompact)
+    ) {
+      return "partial";
+    }
+
+    const guessTokens = normalizedTokens(value);
+    const answerTokens = normalizedTokens(answer);
+
+    if (
+      guessTokens.some((token) =>
+        answerTokens.includes(token),
+      )
+    ) {
+      return "partial";
+    }
   }
 
   return "wrong";
 }
 
 
+function statusLabel(status) {
+  switch (status) {
+    case "exact":
+      return "Correct";
+
+    case "partial":
+      return "Close";
+
+    default:
+      return "Wrong";
+  }
+}
+
+
+function statusDetail(status) {
+  switch (status) {
+    case "exact":
+      return "Exact match";
+
+    case "partial":
+      return "Possible match";
+
+    default:
+      return "Not a match";
+  }
+}
+
+
 /* -------------------------------------------------------------------------- */
-/* Images                                                                     */
+/* Daily puzzle                                                                */
 /* -------------------------------------------------------------------------- */
 
-function selectedImage(game) {
-  const usable =
-    (game.images || []).filter(
-      image => image.path,
-    );
+function dateKey(date = new Date()) {
+  return date.toISOString().slice(0, 10);
+}
 
-  if (!usable.length) {
+
+function daysBetween(startDate, endDate) {
+  const start = Date.parse(`${startDate}T00:00:00Z`);
+  const end = Date.parse(`${endDate}T00:00:00Z`);
+
+  return Math.floor((end - start) / 86400000);
+}
+
+
+function dailyPuzzleIndex(date = new Date()) {
+  const days = Math.max(
+    0,
+    daysBetween(DAILY_EPOCH, dateKey(date)),
+  );
+
+  return games.length
+    ? days % games.length
+    : 0;
+}
+
+
+function getDailyPuzzle() {
+  return games[dailyPuzzleIndex()];
+}
+
+
+function getRandomPuzzle() {
+  if (!games.length) {
     return null;
   }
 
-  // First logical image for v1.
-  return usable[0];
-}
-
-function clarityForGuessCount(
-  count,
-) {
-  const levels = [
-    ["Very pixelated", 12],
-    ["Heavily pixelated", 20],
-    ["Pixelated", 32],
-    ["Getting recognizable", 48],
-    ["Mostly clear", 80],
-    ["Clear", 160],
-  ];
-
-  return levels[
-    Math.min(
-      count,
-      levels.length - 1,
-    )
+  return games[
+    Math.floor(Math.random() * games.length)
   ];
 }
 
-function drawPixelated(
-  forceClear = false,
-) {
-  if (!sourceImage) return;
+
+/* -------------------------------------------------------------------------- */
+/* Storage                                                                     */
+/* -------------------------------------------------------------------------- */
+
+function storageKey() {
+  if (mode === "free") {
+    return `${STORAGE_PREFIX}:free`;
+  }
+
+  return `${STORAGE_PREFIX}:${dateKey()}`;
+}
+
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(storageKey());
+
+    if (!raw) {
+      return null;
+    }
+
+    const saved = JSON.parse(raw);
+
+    if (!saved || typeof saved !== "object") {
+      return null;
+    }
+
+    return {
+      puzzleId: saved.puzzleId || null,
+      guesses: Array.isArray(saved.guesses)
+        ? saved.guesses.map(decodeHtmlEntities)
+        : [],
+      finished: Boolean(saved.finished),
+      won: Boolean(saved.won),
+    };
+  } catch {
+    return null;
+  }
+}
+
+
+function saveState() {
+  try {
+    localStorage.setItem(
+      storageKey(),
+      JSON.stringify({
+        puzzleId: puzzle?.id || null,
+        guesses,
+        finished,
+        won,
+      }),
+    );
+  } catch {
+    // Local storage may be unavailable.
+  }
+}
+
+
+/* -------------------------------------------------------------------------- */
+/* Statistics                                                                  */
+/* -------------------------------------------------------------------------- */
+
+function statsStorageKey() {
+  return `${STORAGE_PREFIX}:stats`;
+}
+
+
+function loadStats() {
+  try {
+    const raw = localStorage.getItem(statsStorageKey());
+
+    if (!raw) {
+      return {};
+    }
+
+    const stats = JSON.parse(raw);
+
+    return stats && typeof stats === "object"
+      ? stats
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+
+function saveStats(stats) {
+  try {
+    localStorage.setItem(
+      statsStorageKey(),
+      JSON.stringify(stats),
+    );
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+
+function recordDailyResult(success, guessCount) {
+  const stats = loadStats();
+  const today = dateKey();
+
+  // Never overwrite an existing daily result.
+  if (stats[today]) {
+    return;
+  }
+
+  stats[today] = {
+    won: Boolean(success),
+    guesses: success ? guessCount : null,
+  };
+
+  saveStats(stats);
+}
+
+
+function completedDailyResults() {
+  const stats = loadStats();
+
+  return Object.entries(stats)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, result]) => ({
+      date,
+      ...result,
+    }));
+}
+
+
+function calculateStats() {
+  const results = completedDailyResults();
+
+  const played = results.length;
+  const wins = results.filter(
+    (result) => result.won,
+  ).length;
+
+  let currentStreak = 0;
+  let bestStreak = 0;
+  let streak = 0;
+
+  const distribution = [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+  ];
+
+  for (const result of results) {
+    if (result.won) {
+      streak += 1;
+      bestStreak = Math.max(bestStreak, streak);
+
+      if (
+        Number.isInteger(result.guesses) &&
+        result.guesses >= 1 &&
+        result.guesses <= MAX_GUESSES
+      ) {
+        distribution[result.guesses - 1] += 1;
+      }
+    } else {
+      streak = 0;
+    }
+  }
+
+  const today = dateKey();
+
+  if (results.length) {
+    const lastResult =
+      results[results.length - 1];
+
+    if (
+      lastResult.date === today &&
+      lastResult.won
+    ) {
+      currentStreak = streak;
+    } else {
+      const yesterday = new Date(
+        `${today}T00:00:00Z`,
+      );
+
+      yesterday.setUTCDate(
+        yesterday.getUTCDate() - 1,
+      );
+
+      const yesterdayKey = dateKey(yesterday);
+
+      if (
+        lastResult.date === yesterdayKey &&
+        lastResult.won
+      ) {
+        currentStreak = streak;
+      }
+    }
+  }
+
+  return {
+    played,
+    wins,
+    winRate: played
+      ? Math.round((wins / played) * 100)
+      : 0,
+    currentStreak,
+    bestStreak,
+    distribution,
+  };
+}
+
+
+function createStatsUI() {
+  const headerActions =
+    document.querySelector(".header-actions");
+
+  if (
+    !headerActions ||
+    document.querySelector("#stats-button")
+  ) {
+    return;
+  }
+
+  const statsButton =
+    document.createElement("button");
+
+  statsButton.className = "icon-button";
+  statsButton.id = "stats-button";
+  statsButton.type = "button";
+  statsButton.textContent = "▥";
+  statsButton.setAttribute(
+    "aria-label",
+    "Statistics",
+  );
+  statsButton.title = "Statistics";
+
+  const dialog = document.createElement("dialog");
+
+  dialog.id = "stats-dialog";
+  dialog.className = "game-dialog";
+
+  dialog.innerHTML = `
+    <div class="dialog-content">
+      <div class="dialog-header">
+        <div>
+          <p class="eyebrow">Your stats</p>
+          <h2>Daily progress</h2>
+        </div>
+
+        <button
+          class="dialog-close"
+          id="close-stats"
+          type="button"
+          aria-label="Close statistics"
+        >×</button>
+      </div>
+
+      <div id="stats-content"></div>
+    </div>
+  `;
+
+  document.body.append(dialog);
+
+  const closeButton =
+    dialog.querySelector("#close-stats");
+
+  statsButton.addEventListener("click", () => {
+    renderStats();
+    dialog.showModal();
+  });
+
+  closeButton.addEventListener("click", () => {
+    dialog.close();
+  });
+
+  dialog.addEventListener("click", (event) => {
+    if (event.target === dialog) {
+      dialog.close();
+    }
+  });
+
+  headerActions.insertBefore(
+    statsButton,
+    elements.reportButton,
+  );
+}
+
+
+function renderStats() {
+  const container =
+    document.querySelector("#stats-content");
+
+  if (!container) {
+    return;
+  }
+
+  const stats = calculateStats();
+
+  const maxDistribution = Math.max(
+    1,
+    ...stats.distribution,
+  );
+
+  container.innerHTML = `
+    <div class="stats-summary">
+      <div class="stats-stat">
+        <strong>${stats.played}</strong>
+        <span>Played</span>
+      </div>
+
+      <div class="stats-stat">
+        <strong>${stats.winRate}%</strong>
+        <span>Win rate</span>
+      </div>
+
+      <div class="stats-stat">
+        <strong>${stats.currentStreak}</strong>
+        <span>Current streak</span>
+      </div>
+
+      <div class="stats-stat">
+        <strong>${stats.bestStreak}</strong>
+        <span>Best streak</span>
+      </div>
+    </div>
+
+    <h3>Guess distribution</h3>
+
+    <div class="stats-distribution">
+      ${stats.distribution
+        .map(
+          (count, index) => `
+            <div class="stats-distribution-row">
+              <span>${index + 1}</span>
+
+              <div class="stats-bar-track">
+                <div
+                  class="stats-bar"
+                  style="width: ${
+                    (count / maxDistribution) * 100
+                  }%"
+                >${count}</div>
+              </div>
+            </div>
+          `,
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+
+/* -------------------------------------------------------------------------- */
+/* Image rendering                                                             */
+/* -------------------------------------------------------------------------- */
+
+function imagePath(image) {
+  return image?.path || "";
+}
+
+
+function loadImage(url) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+
+    image.onload = () => resolve(image);
+    image.onerror = reject;
+    image.src = url;
+  });
+}
+
+
+function calculatePixelSize() {
+  if (guesses.length === 0) {
+    return 48;
+  }
+
+  if (guesses.length === 1) {
+    return 32;
+  }
+
+  if (guesses.length === 2) {
+    return 24;
+  }
+
+  if (guesses.length === 3) {
+    return 16;
+  }
+
+  if (guesses.length === 4) {
+    return 10;
+  }
+
+  return 4;
+}
+
+
+function drawPuzzleImage() {
+  if (!sourceImage) {
+    return;
+  }
 
   const width =
-    elements.canvas.clientWidth ||
-    800;
+    elements.canvas.clientWidth || 800;
 
   const height =
     elements.canvas.clientHeight ||
-    450;
+    Math.round(width * 0.65);
 
-  const dpr =
-    Math.min(
-      window.devicePixelRatio ||
-        1,
-      2,
-    );
-
-  elements.canvas.width =
-    Math.round(
-      width * dpr,
-    );
-
-  elements.canvas.height =
-    Math.round(
-      height * dpr,
-    );
+  elements.canvas.width = width;
+  elements.canvas.height = height;
 
   ctx.clearRect(
     0,
@@ -1111,589 +771,487 @@ function drawPixelated(
     elements.canvas.height,
   );
 
-  const targetRatio =
-    width / height;
+  const imageRatio =
+    sourceImage.width / sourceImage.height;
 
-  const sourceRatio =
-    sourceImage.naturalWidth /
-    sourceImage.naturalHeight;
+  const canvasRatio = width / height;
 
-  let sx = 0;
-  let sy = 0;
-  let sw =
-    sourceImage.naturalWidth;
-  let sh =
-    sourceImage.naturalHeight;
+  let drawWidth;
+  let drawHeight;
+  let offsetX;
+  let offsetY;
 
-  if (
-    sourceRatio >
-    targetRatio
-  ) {
-    sw =
-      sourceImage.naturalHeight *
-      targetRatio;
-
-    sx =
-      (
-        sourceImage.naturalWidth -
-        sw
-      ) / 2;
+  if (imageRatio > canvasRatio) {
+    drawHeight = height;
+    drawWidth = height * imageRatio;
+    offsetX = (width - drawWidth) / 2;
+    offsetY = 0;
   } else {
-    sh =
-      sourceImage.naturalWidth /
-      targetRatio;
-
-    sy =
-      (
-        sourceImage.naturalHeight -
-        sh
-      ) / 2;
+    drawWidth = width;
+    drawHeight = width / imageRatio;
+    offsetX = 0;
+    offsetY = (height - drawHeight) / 2;
   }
 
-  if (forceClear) {
-    ctx.imageSmoothingEnabled =
-      true;
+  const pixelSize = calculatePixelSize();
 
+  if (pixelSize <= 1) {
     ctx.drawImage(
       sourceImage,
-      sx,
-      sy,
-      sw,
-      sh,
-      0,
-      0,
-      elements.canvas.width,
-      elements.canvas.height,
+      offsetX,
+      offsetY,
+      drawWidth,
+      drawHeight,
     );
 
     return;
   }
 
-  const pixelSize =
-    clarityForGuessCount(
-      guesses.length,
-    )[1];
+  const smallWidth = Math.max(
+    1,
+    Math.ceil(drawWidth / pixelSize),
+  );
 
-  let smallWidth;
-  let smallHeight;
+  const smallHeight = Math.max(
+    1,
+    Math.ceil(drawHeight / pixelSize),
+  );
 
-  if (
-    targetRatio >= 1
-  ) {
-    smallHeight =
-      pixelSize;
+  const offscreen =
+    document.createElement("canvas");
 
-    smallWidth =
-      Math.max(
-        8,
-        Math.round(
-          pixelSize *
-            targetRatio,
-        ),
-      );
-  } else {
-    smallWidth =
-      pixelSize;
+  offscreen.width = smallWidth;
+  offscreen.height = smallHeight;
 
-    smallHeight =
-      Math.max(
-        8,
-        Math.round(
-          pixelSize /
-            targetRatio,
-        ),
-      );
-  }
+  const offscreenCtx =
+    offscreen.getContext("2d");
 
-  const temp =
-    document.createElement(
-      "canvas",
-    );
+  offscreenCtx.imageSmoothingEnabled = false;
 
-  temp.width =
-    smallWidth;
-
-  temp.height =
-    smallHeight;
-
-  const tempCtx =
-    temp.getContext("2d");
-
-  tempCtx.imageSmoothingEnabled =
-    true;
-
-  tempCtx.drawImage(
+  offscreenCtx.drawImage(
     sourceImage,
-    sx,
-    sy,
-    sw,
-    sh,
     0,
     0,
     smallWidth,
     smallHeight,
   );
 
-  ctx.imageSmoothingEnabled =
-    false;
+  ctx.imageSmoothingEnabled = false;
 
   ctx.drawImage(
-    temp,
-    0,
-    0,
-    smallWidth,
-    smallHeight,
-    0,
-    0,
-    elements.canvas.width,
-    elements.canvas.height,
+    offscreen,
+    offsetX,
+    offsetY,
+    drawWidth,
+    drawHeight,
   );
 }
 
 
 /* -------------------------------------------------------------------------- */
-/* Guess UI                                                                   */
+/* Guess rendering                                                             */
 /* -------------------------------------------------------------------------- */
 
-function statusLabel(status) {
-  switch (status) {
-    case "correct":
-      return "🟩 Correct";
-
-    case "partial":
-      return "🟨 Close";
-
-    default:
-      return "⬜ Wrong";
-  }
-}
-
-function statusDetail(status) {
-  switch (status) {
-    case "correct":
-      return "You found it.";
-
-    case "partial":
-      return "That looks like a related title.";
-
-    default:
-      return "Not this one.";
-  }
-}
-
 function renderGuesses() {
-  elements.guesses.innerHTML =
-    "";
+  elements.guesses.replaceChildren();
 
   for (
     let index = 0;
     index < MAX_GUESSES;
     index += 1
   ) {
-    const guess =
-      guesses[index];
+    const row = document.createElement("div");
 
-    const row =
-      document.createElement(
-        "li",
-      );
+    row.className = "guess-row";
 
-    if (!guess) {
-      row.className =
-        "guess-row empty";
+    if (index >= guesses.length) {
+      row.classList.add("empty");
 
       row.innerHTML = `
-        <span class="guess-name">—</span>
-        <span class="guess-status">Waiting</span>
-        <span class="attempt">
-          ${index + 1}/${MAX_GUESSES}
-        </span>
+        <span class="guess-name"></span>
+        <span class="guess-status"></span>
+        <span class="guess-number">${index + 1}</span>
       `;
 
-      elements.guesses.appendChild(
-        row,
-      );
-
+      elements.guesses.append(row);
       continue;
     }
 
-    const status =
-      guessStatus(guess);
-
-    row.className =
-      `guess-row ${status}`;
-
-    row.innerHTML = `
-      <span class="guess-name">
-        ${escapeHtml(guess)}
-      </span>
-      <span class="guess-status">
-        ${statusLabel(status)}
-        <small>
-          ${statusDetail(status)}
-        </small>
-      </span>
-      <span class="attempt">
-        ${index + 1}/${MAX_GUESSES}
-      </span>
-    `;
-
-    elements.guesses.appendChild(
-      row,
+    const guess = decodeHtmlEntities(
+      guesses[index],
     );
+
+    const status = guessStatus(guess);
+
+    const name =
+      document.createElement("span");
+
+    name.className = "guess-name";
+
+    name.append(
+      document.createTextNode(guess),
+    );
+
+    const matchedGame =
+      findGameForGuess(guess);
+
+    const sourceLink = createSourceLink(
+      matchedGame,
+      "guess-source-link",
+    );
+
+    if (sourceLink) {
+      name.append(
+        document.createTextNode(" "),
+        sourceLink,
+      );
+    }
+
+    const statusElement =
+      document.createElement("span");
+
+    statusElement.className =
+      `guess-status ${status}`;
+
+    const statusName =
+      document.createElement("strong");
+
+    statusName.textContent =
+      statusLabel(status);
+
+    const statusDescription =
+      document.createElement("small");
+
+    statusDescription.textContent =
+      statusDetail(status);
+
+    statusElement.append(
+      statusName,
+      statusDescription,
+    );
+
+    const number =
+      document.createElement("span");
+
+    number.className = "guess-number";
+    number.textContent = String(index + 1);
+
+    row.append(
+      name,
+      statusElement,
+      number,
+    );
+
+    elements.guesses.append(row);
   }
-
-  elements.progress.textContent =
-    finished
-      ? won
-        ? `Solved in ${guesses.length}`
-        : "Game over"
-      : `Guess ${
-          guesses.length + 1
-        } of ${MAX_GUESSES}`;
-
-  elements.clarity.textContent =
-    clarityForGuessCount(
-      guesses.length,
-    )[0];
-}
-
-function escapeHtml(value) {
-  const div =
-    document.createElement(
-      "div",
-    );
-
-  div.textContent = value;
-
-  return div.innerHTML;
-}
-
-function setMessage(
-  message,
-  isError = false,
-) {
-  elements.message.textContent =
-    message;
-
-  elements.message.classList.toggle(
-    "error",
-    isError,
-  );
-}
-
-function flash(
-  element,
-  className,
-) {
-  if (!element) return;
-
-  element.classList.remove(
-    className,
-  );
-
-  void element.offsetWidth;
-
-  element.classList.add(
-    className,
-  );
 }
 
 
 /* -------------------------------------------------------------------------- */
-/* Game completion                                                            */
+/* Suggestions                                                                 */
 /* -------------------------------------------------------------------------- */
-
-function finishGame(success) {
-  finished = true;
-  won = success;
-
-  elements.input.disabled =
-    true;
-
-  elements.button.disabled =
-    true;
-
-  hideSuggestions();
-
-  if (success) {
-    drawPixelated(true);
-  }
-
-  elements.result.hidden =
-    false;
-
-  elements.result.classList.add(
-    "pop",
-  );
-
-  if (success) {
-    elements.resultKicker.textContent =
-      "Nice one";
-
-    elements.resultTitle.textContent =
-      puzzle.name;
-
-    elements.resultDetail.textContent =
-      `You got it in ${
-        guesses.length
-      } ${
-        guesses.length === 1
-          ? "guess"
-          : "guesses"
-      }.`;
-  } else {
-    elements.resultKicker.textContent =
-      mode === "free"
-        ? "Try another"
-        : "Better luck tomorrow";
-
-    elements.resultTitle.textContent =
-      puzzle.name;
-
-    elements.resultDetail.textContent =
-      `The answer was ${puzzle.name}.`;
-  }
-
-  updateReportDialog();
-
-  saveState();
-
-  // Only completed Daily games become statistics.
-  recordDailyResult();
-
-  renderGuesses();
-}
-
-
-/* -------------------------------------------------------------------------- */
-/* Guess submission                                                           */
-/* -------------------------------------------------------------------------- */
-
-function submitGuess(value) {
-  const guess =
-    value.trim();
-
-  if (
-    !guess ||
-    finished
-  ) {
-    return;
-  }
-
-  const normalized =
-    normalize(guess);
-
-  if (
-    guesses.some(
-      existing =>
-        normalize(existing) ===
-        normalized,
-    )
-  ) {
-    setMessage(
-      "You already tried that.",
-      true,
-    );
-
-    flash(
-      elements.input,
-      "shake",
-    );
-
-    return;
-  }
-
-  const status =
-    guessStatus(guess);
-
-  guesses.push(guess);
-
-  elements.input.value =
-    "";
-
-  hideSuggestions();
-
-  drawPixelated();
-  renderGuesses();
-
-  const latestRow =
-    elements.guesses[
-      guesses.length - 1
-    ];
-
-  flash(
-    latestRow,
-    "pop",
-  );
-
-  if (
-    status === "correct"
-  ) {
-    finishGame(true);
-    return;
-  }
-
-  if (
-    guesses.length >=
-    MAX_GUESSES
-  ) {
-    finishGame(false);
-    return;
-  }
-
-  if (
-    status === "partial"
-  ) {
-    setMessage(
-      "🟨 Close! You're in the right neighborhood.",
-    );
-  } else {
-    setMessage(
-      "⬜ Nope. The picture just got a little clearer.",
-    );
-  }
-
-  saveState();
-
-  elements.input.focus();
-}
-
-
-/* -------------------------------------------------------------------------- */
-/* Autocomplete                                                               */
-/* -------------------------------------------------------------------------- */
-
-let suggestionNames = [];
 
 function populateSuggestions() {
+  const names = games
+    .map(displayGameName)
+    .filter(Boolean);
+
   suggestionNames = [
-    ...new Set(
-      games
-        .map(game => game.name)
-        .filter(Boolean),
-    ),
+    ...new Map(
+      names.map((name) => [
+        normalize(name),
+        name,
+      ]),
+    ).values(),
   ];
 }
 
+
 function hideSuggestions() {
-  if (!elements.suggestions) {
-    return;
-  }
-
-  elements.suggestions.hidden =
-    true;
-
-  elements.suggestions.innerHTML =
-    "";
-
-  elements.input?.setAttribute(
-    "aria-expanded",
-    "false",
-  );
+  elements.suggestions.hidden = true;
+  elements.suggestions.replaceChildren();
 }
 
-function showSuggestions(matches) {
-  if (!elements.suggestions) {
+
+function showSuggestions(value) {
+  const normalized = normalize(value);
+
+  if (normalized.length < 3) {
+    hideSuggestions();
     return;
   }
 
-  elements.suggestions.innerHTML =
-    "";
+  const matches = suggestionNames
+    .filter((name) =>
+      normalize(name).includes(normalized),
+    )
+    .slice(0, 8);
 
   if (!matches.length) {
     hideSuggestions();
     return;
   }
 
-  matches.forEach(
-    (name, index) => {
-      const option =
-        document.createElement(
-          "button",
-        );
+  elements.suggestions.replaceChildren();
 
-      option.type = "button";
-      option.className =
-        "suggestion";
+  for (const name of matches) {
+    const option =
+      document.createElement("button");
 
-      option.setAttribute(
-        "role",
-        "option",
-      );
+    option.type = "button";
+    option.className = "suggestion";
+    option.textContent = name;
 
-      option.setAttribute(
-        "aria-selected",
-        "false",
-      );
+    option.addEventListener("click", () => {
+      elements.input.value = name;
+      hideSuggestions();
+      elements.input.focus();
+    });
 
-      option.dataset.index =
-        String(index);
-
-      option.textContent =
-        name;
-
-      option.addEventListener(
-        "click",
-        () => {
-          elements.input.value =
-            name;
-
-          hideSuggestions();
-
-          elements.input.focus();
-        },
-      );
-
-      elements.suggestions.appendChild(
-        option,
-      );
-    },
-  );
-
-  elements.suggestions.hidden =
-    false;
-
-  elements.input?.setAttribute(
-    "aria-expanded",
-    "true",
-  );
-}
-
-function updateAutocomplete() {
-  if (!elements.input) {
-    return;
+    elements.suggestions.append(option);
   }
 
-  const value =
-    elements.input.value.trim();
-
-  if (
-    value.length < 3 ||
-    finished
-  ) {
-    hideSuggestions();
-    return;
-  }
-
-  const normalizedQuery =
-    normalize(value);
-
-  const matches =
-    suggestionNames
-      .filter(name =>
-        normalize(name).includes(
-          normalizedQuery,
-        ),
-      )
-      .slice(0, 8);
-
-  showSuggestions(matches);
+  elements.suggestions.hidden = false;
 }
 
 
 /* -------------------------------------------------------------------------- */
-/* Puzzle issue reporting                                                     */
+/* Progress / messaging                                                        */
+/* -------------------------------------------------------------------------- */
+
+function updateProgress() {
+  elements.progress.textContent =
+    `${guesses.length} / ${MAX_GUESSES}`;
+
+  const remaining = Math.max(
+    0,
+    MAX_GUESSES - guesses.length,
+  );
+
+  elements.clarity.textContent =
+    remaining === MAX_GUESSES
+      ? "Very blurry"
+      : remaining === 0
+        ? "Fully revealed"
+        : `${remaining} guess${
+            remaining === 1 ? "" : "es"
+          } remaining`;
+}
+
+
+function setMessage(message, type = "") {
+  elements.message.textContent = message;
+  elements.message.className = "game-message";
+
+  if (type) {
+    elements.message.classList.add(type);
+  }
+}
+
+
+/* -------------------------------------------------------------------------- */
+/* Game lifecycle                                                              */
+/* -------------------------------------------------------------------------- */
+
+async function startPuzzle(nextPuzzle) {
+  puzzle = nextPuzzle;
+  sourceImage = null;
+  guesses = [];
+  finished = false;
+  won = false;
+
+  elements.result.hidden = true;
+  elements.form.hidden = false;
+  elements.input.disabled = false;
+  elements.button.disabled = false;
+  elements.input.value = "";
+
+  hideSuggestions();
+
+  renderGuesses();
+  updateProgress();
+
+  setMessage("");
+
+  if (mode === "daily") {
+    elements.modeLabel.textContent =
+      "Daily puzzle";
+
+    elements.date.textContent =
+      new Intl.DateTimeFormat(undefined, {
+        dateStyle: "long",
+      }).format(new Date());
+  } else {
+    elements.modeLabel.textContent =
+      "Free play";
+
+    elements.date.textContent =
+      "Random puzzle";
+  }
+
+  const image = puzzle?.images?.[0];
+
+  if (!image) {
+    setMessage(
+      "This puzzle does not have an image yet.",
+      "error",
+    );
+
+    return;
+  }
+
+  try {
+    sourceImage = await loadImage(
+      imagePath(image),
+    );
+
+    drawPuzzleImage();
+  } catch {
+    setMessage(
+      "The puzzle image could not be loaded.",
+      "error",
+    );
+  }
+}
+
+
+function finishGame(success) {
+  finished = true;
+  won = success;
+
+  elements.input.disabled = true;
+  elements.button.disabled = true;
+
+  hideSuggestions();
+
+  if (success) {
+    elements.resultKicker.textContent =
+      "Nice one";
+
+    renderResultTitle(puzzle);
+
+    elements.resultDetail.textContent =
+      `You got it in ${guesses.length} ${
+        guesses.length === 1
+          ? "guess"
+          : "guesses"
+      }.`;
+
+    if (mode === "daily") {
+      recordDailyResult(
+        true,
+        guesses.length,
+      );
+    }
+  } else {
+    elements.resultKicker.textContent =
+      "Better luck next time";
+
+    renderResultTitle(puzzle);
+
+    elements.resultDetail.textContent =
+      `The answer was ${displayGameName(puzzle)}.`;
+
+    if (mode === "daily") {
+      recordDailyResult(false, null);
+    }
+  }
+
+  elements.result.hidden = false;
+
+  saveState();
+}
+
+
+/* -------------------------------------------------------------------------- */
+/* Guess submission                                                            */
+/* -------------------------------------------------------------------------- */
+
+function submitGuess(value) {
+  if (finished || !puzzle) {
+    return;
+  }
+
+  const guess = decodeHtmlEntities(
+    String(value ?? "").trim(),
+  );
+
+  if (!guess) {
+    setMessage(
+      "Enter a guess first.",
+      "error",
+    );
+
+    return;
+  }
+
+  const normalizedGuess =
+    normalize(guess);
+
+  if (
+    guesses.some(
+      (existing) =>
+        normalize(existing) === normalizedGuess,
+    )
+  ) {
+    setMessage(
+      "You already tried that guess.",
+      "error",
+    );
+
+    return;
+  }
+
+  const status = guessStatus(guess);
+
+  guesses.push(guess);
+
+  renderGuesses();
+  updateProgress();
+  drawPuzzleImage();
+
+  if (status === "exact") {
+    setMessage(
+      "Correct!",
+      "success",
+    );
+
+    finishGame(true);
+
+    return;
+  }
+
+  if (guesses.length >= MAX_GUESSES) {
+    setMessage(
+      `The answer was ${displayGameName(puzzle)}.`,
+      "error",
+    );
+
+    finishGame(false);
+
+    return;
+  }
+
+  if (status === "partial") {
+    setMessage(
+      "Close! You're on the right track.",
+      "partial",
+    );
+  } else {
+    setMessage(
+      "Nope. The image is a little clearer now.",
+    );
+  }
+
+  saveState();
+
+  elements.input.value = "";
+  elements.input.focus();
+}
+
+
+/* -------------------------------------------------------------------------- */
+/* Report issue                                                                */
 /* -------------------------------------------------------------------------- */
 
 function updateReportDialog() {
@@ -1701,502 +1259,311 @@ function updateReportDialog() {
     return;
   }
 
-  const puzzleId =
-    puzzle.id || "unknown";
+  elements.reportPuzzleId.textContent =
+    puzzle.id || "Unknown";
 
-  if (elements.reportPuzzleId) {
-    elements.reportPuzzleId.textContent =
-      puzzleId;
-  }
+  const params = new URLSearchParams();
 
-  if (elements.reportIssueLink) {
-    elements.reportIssueLink.href =
-      buildIssueUrl();
-  }
-}
-
-function buildIssueUrl() {
-  const puzzleId =
-    puzzle?.id || "unknown";
-
-  const sourceUrl =
-    puzzle?.source?.url || "";
-
-  const title =
-    `[Puzzle] Issue with ${puzzleId}`;
+  params.set(
+    "title",
+    `Puzzle issue: ${puzzle.id}`,
+  );
 
   const body = [
-    "## Puzzle information",
+    "## Puzzle issue",
     "",
-    `- Puzzle ID: \`${puzzleId}\``,
-    `- VGSM source page: ${sourceUrl || "Unknown"}`,
+    `Puzzle ID: ${puzzle.id}`,
+    `VGSM source: ${
+      puzzle.source?.url || "Unknown"
+    }`,
     "",
-    "## Problem",
+    "### What is wrong?",
     "",
-    "<!-- What is wrong with this puzzle?",
-    "Examples: wrong image, broken image, missing image, incorrect metadata. -->",
+    "<!-- Examples: incorrect image, missing image, broken source post, etc. -->",
     "",
   ].join("\n");
 
-  const params =
-    new URLSearchParams({
-      title,
-      body,
-    });
+  params.set("body", body);
+  params.set("labels", "bug");
 
-  return `${GITHUB_ISSUE_URL}?${params.toString()}`;
+  elements.reportIssueLink.href =
+    `${GITHUB_ISSUE_URL}?${params.toString()}`;
 }
 
-function openReportDialog() {
+
+/* -------------------------------------------------------------------------- */
+/* Sharing                                                                     */
+/* -------------------------------------------------------------------------- */
+
+async function shareResult() {
   if (!puzzle) {
     return;
   }
 
-  updateReportDialog();
+  const rows = guesses.map((guess) => {
+    const status = guessStatus(guess);
 
-  elements.reportDialog.showModal();
-}
+    if (status === "exact") {
+      return "🟩";
+    }
 
+    if (status === "partial") {
+      return "🟨";
+    }
 
-/* -------------------------------------------------------------------------- */
-/* Sharing                                                                    */
-/* -------------------------------------------------------------------------- */
+    return "⬜";
+  });
 
-function shareResult() {
-  const blocks =
-    guesses
-      .map(guess => {
-        switch (
-          guessStatus(guess)
-        ) {
-          case "correct":
-            return "🟩";
+  const resultText = [
+    `Pop Quiz — ${
+      mode === "daily"
+        ? dateKey()
+        : "Free Play"
+    }`,
+    "",
+    rows.join(""),
+    "",
+    won
+      ? `${guesses.length}/${MAX_GUESSES}`
+      : `X/${MAX_GUESSES}`,
+  ].join("\n");
 
-          case "partial":
-            return "🟨";
-
-          default:
-            return "⬜";
-        }
-      })
-      .join("");
-
-  const text =
-    `Pop Quiz ${
-      mode === "free"
-        ? "Free Play"
-        : localDateKey()
-    }\n` +
-    `${blocks}\n` +
-    `${
-      won
-        ? `${guesses.length}/6`
-        : "X/6"
-    }\n` +
-    "https://sedward5.github.io/soda-guesser/";
-
-  if (navigator.share) {
-    navigator
-      .share({
+  try {
+    if (navigator.share) {
+      await navigator.share({
         title: "Pop Quiz",
-        text,
-      })
-      .catch(() => {});
+        text: resultText,
+      });
 
-    return;
+      return;
+    }
+
+    await navigator.clipboard.writeText(
+      resultText,
+    );
+
+    setMessage(
+      "Result copied to your clipboard.",
+      "success",
+    );
+  } catch {
+    // User cancelled sharing or clipboard access failed.
   }
-
-  navigator.clipboard
-    ?.writeText(text)
-    .then(() => {
-      setMessage(
-        "Result copied to your clipboard.",
-      );
-    })
-    .catch(() => {
-      setMessage(text);
-    });
 }
 
 
 /* -------------------------------------------------------------------------- */
-/* Image loading                                                              */
+/* Load data                                                                   */
 /* -------------------------------------------------------------------------- */
 
-function loadImage(path) {
-  return new Promise(
-    (resolve, reject) => {
-      const image =
-        new Image();
-
-      image.onload = () => {
-        resolve(image);
-      };
-
-      image.onerror = () => {
-        reject(
-          new Error(
-            `Could not load image: ${path}`,
-          ),
-        );
-      };
-
-      image.src = path;
+async function loadGames() {
+  const response = await fetch(
+    "./data/games.json",
+    {
+      cache: "no-store",
     },
   );
-}
 
-
-/* -------------------------------------------------------------------------- */
-/* Puzzle selection                                                           */
-/* -------------------------------------------------------------------------- */
-
-function selectDailyPuzzle() {
-  const key =
-    localDateKey();
-
-  const index =
-    dailyIndex(
-      key,
-      games.length,
-    );
-
-  return games[index];
-}
-
-function selectFreePuzzle() {
-  if (!games.length) {
-    return null;
-  }
-
-  // Avoid immediately replaying the same game when possible.
-  const previousId =
-    puzzle?.id;
-
-  const candidates =
-    games.filter(
-      game =>
-        game.id !==
-        previousId,
-    );
-
-  const pool =
-    candidates.length
-      ? candidates
-      : games;
-
-  const index =
-    Math.floor(
-      Math.random() *
-        pool.length,
-    );
-
-  return pool[index];
-}
-
-
-/* -------------------------------------------------------------------------- */
-/* UI mode                                                                    */
-/* -------------------------------------------------------------------------- */
-
-function updateModeUI() {
-  if (elements.modeLabel) {
-    elements.modeLabel.textContent =
-      mode === "free"
-        ? "Free Play"
-        : "Today's Game";
-  }
-
-  if (elements.freePlay) {
-    elements.freePlay.textContent =
-      mode === "free"
-        ? "Another Game"
-        : "Free Play";
-  }
-
-  elements.date.textContent =
-    mode === "free"
-      ? "Random game"
-      : localDateKey();
-}
-
-
-/* -------------------------------------------------------------------------- */
-/* Start a puzzle                                                             */
-/* -------------------------------------------------------------------------- */
-
-async function startPuzzle(
-  nextPuzzle,
-  nextMode,
-) {
-  if (!nextPuzzle) {
-    return;
-  }
-
-  mode = nextMode;
-  puzzle = nextPuzzle;
-  sourceImage = null;
-
-  guesses = [];
-  finished = false;
-  won = false;
-
-  elements.input.disabled =
-    false;
-
-  elements.button.disabled =
-    false;
-
-  elements.input.value =
-    "";
-
-  hideSuggestions();
-
-  elements.result.hidden =
-    true;
-
-  elements.result.classList.remove(
-    "pop",
-  );
-
-  elements.placeholder.hidden =
-    false;
-
-  elements.placeholder.textContent =
-    "Loading…";
-
-  updateModeUI();
-  updateReportDialog();
-  renderGuesses();
-
-  const image =
-    selectedImage(puzzle);
-
-  if (!image) {
+  if (!response.ok) {
     throw new Error(
-      "This game has no usable image.",
+      `Unable to load games.json: ${response.status}`,
     );
   }
 
-  sourceImage =
-    await loadImage(
-      image.path,
+  const data = await response.json();
+
+  if (!Array.isArray(data.games)) {
+    throw new Error(
+      "games.json does not contain a games array.",
     );
+  }
 
-  elements.placeholder.hidden =
-    true;
+  games = data.games;
 
-  drawPixelated();
-  renderGuesses();
-
-  setMessage(
-    "What game is this?",
-  );
-
-  elements.input.focus();
+  populateSuggestions();
 }
 
 
 /* -------------------------------------------------------------------------- */
-/* Load daily game                                                            */
+/* Mode handling                                                               */
 /* -------------------------------------------------------------------------- */
 
 async function loadGame() {
-  try {
+  const saved = loadState();
+
+  const requestedPuzzle =
+    mode === "free"
+      ? getRandomPuzzle()
+      : getDailyPuzzle();
+
+  if (!requestedPuzzle) {
     setMessage(
-      "Loading today's game…",
+      "No puzzles are available yet.",
+      "error",
     );
 
-    const response =
-      await fetch(
-        "data/games.json",
-        {
-          cache: "no-store",
-        },
-      );
+    return;
+  }
 
-    if (!response.ok) {
-      throw new Error(
-        `Could not load game data (HTTP ${response.status}).`,
-      );
-    }
+  await startPuzzle(requestedPuzzle);
 
-    const data =
-      await response.json();
+  if (
+    saved &&
+    saved.puzzleId === puzzle.id &&
+    Array.isArray(saved.guesses)
+  ) {
+    guesses =
+      saved.guesses.map(decodeHtmlEntities);
 
-    games =
-      Array.isArray(data.games)
-        ? data.games
-        : [];
+    finished = Boolean(saved.finished);
+    won = Boolean(saved.won);
 
-    if (!games.length) {
-      throw new Error(
-        "No games were found in the dataset.",
-      );
-    }
-
-    populateSuggestions();
-
-    mode = "daily";
-
-    puzzle =
-      selectDailyPuzzle();
-
-    const image =
-      selectedImage(puzzle);
-
-    if (!image) {
-      throw new Error(
-        "Today's game has no usable image.",
-      );
-    }
-
-    // Load saved daily state.
-    loadState();
-
-    sourceImage =
-      await loadImage(
-        image.path,
-      );
-
-    elements.placeholder.hidden =
-      true;
-
-    updateModeUI();
-    updateReportDialog();
-
-    drawPixelated();
     renderGuesses();
+    updateProgress();
+    drawPuzzleImage();
 
     if (finished) {
-      elements.result.hidden =
-        false;
-
-      elements.resultKicker.textContent =
-        won
-          ? "Already solved"
-          : "Today's answer";
-
-      elements.resultTitle.textContent =
-        puzzle.name;
-
-      elements.resultDetail.textContent =
-        won
-          ? `You solved it in ${
-              guesses.length
-            } ${
-              guesses.length === 1
-                ? "guess"
-                : "guesses"
-            }.`
-          : "Come back tomorrow for a new game.";
+      elements.input.disabled = true;
+      elements.button.disabled = true;
 
       if (won) {
-        drawPixelated(true);
+        elements.resultKicker.textContent =
+          "Nice one";
+
+        renderResultTitle(puzzle);
+
+        elements.resultDetail.textContent =
+          `You got it in ${guesses.length} ${
+            guesses.length === 1
+              ? "guess"
+              : "guesses"
+          }.`;
+      } else {
+        elements.resultKicker.textContent =
+          "Better luck next time";
+
+        renderResultTitle(puzzle);
+
+        elements.resultDetail.textContent =
+          `The answer was ${displayGameName(puzzle)}.`;
       }
-    } else {
-      setMessage(
-        "What game is this?",
-      );
 
-      elements.input.focus();
+      elements.result.hidden = false;
     }
-  } catch (error) {
-    console.error(
-      "Pop Quiz failed to load:",
-      error,
-    );
-
-    elements.placeholder.hidden =
-      false;
-
-    elements.placeholder.textContent =
-      "Couldn't load today's game.";
-
-    setMessage(
-      "Try refreshing the page.",
-      true,
-    );
   }
 }
 
 
+function enterFreePlay() {
+  mode = "free";
+
+  // Free play intentionally has no stats.
+  loadGame();
+}
+
+
+function enterDaily() {
+  mode = "daily";
+
+  loadGame();
+}
+
+
 /* -------------------------------------------------------------------------- */
-/* Events                                                                     */
+/* Events                                                                      */
 /* -------------------------------------------------------------------------- */
 
 elements.form.addEventListener(
   "submit",
-  event => {
+  (event) => {
     event.preventDefault();
 
-    submitGuess(
+    submitGuess(elements.input.value);
+  },
+);
+
+
+elements.input.addEventListener(
+  "input",
+  () => {
+    showSuggestions(
       elements.input.value,
     );
   },
 );
 
+
 elements.input.addEventListener(
-  "input",
-  updateAutocomplete,
+  "focus",
+  () => {
+    showSuggestions(
+      elements.input.value,
+    );
+  },
 );
 
-elements.share.addEventListener(
+
+document.addEventListener(
   "click",
-  shareResult,
-);
-
-
-/* -------------------------------------------------------------------------- */
-/* Help dialog                                                                */
-/* -------------------------------------------------------------------------- */
-
-elements.help.addEventListener(
-  "click",
-  () =>
-    elements.dialog.showModal(),
-);
-
-elements.helpClose.addEventListener(
-  "click",
-  () =>
-    elements.dialog.close(),
-);
-
-elements.dialog.addEventListener(
-  "click",
-  event => {
+  (event) => {
     if (
-      event.target ===
-      elements.dialog
+      !elements.input.contains(event.target) &&
+      !elements.suggestions.contains(event.target)
     ) {
-      elements.dialog.close();
+      hideSuggestions();
     }
   },
 );
 
 
-/* -------------------------------------------------------------------------- */
-/* Report dialog                                                              */
-/* -------------------------------------------------------------------------- */
-
-elements.report.addEventListener(
+elements.helpButton.addEventListener(
   "click",
-  openReportDialog,
+  () => {
+    elements.helpDialog.showModal();
+  },
 );
 
-elements.reportClose.addEventListener(
+
+elements.closeHelp.addEventListener(
   "click",
-  () =>
-    elements.reportDialog.close(),
+  () => {
+    elements.helpDialog.close();
+  },
 );
+
+
+elements.helpDialog.addEventListener(
+  "click",
+  (event) => {
+    if (event.target === elements.helpDialog) {
+      elements.helpDialog.close();
+    }
+  },
+);
+
+
+elements.reportButton.addEventListener(
+  "click",
+  () => {
+    updateReportDialog();
+    elements.reportDialog.showModal();
+  },
+);
+
+
+elements.closeReport.addEventListener(
+  "click",
+  () => {
+    elements.reportDialog.close();
+  },
+);
+
 
 elements.reportDialog.addEventListener(
   "click",
-  event => {
+  (event) => {
     if (
-      event.target ===
-      elements.reportDialog
+      event.target === elements.reportDialog
     ) {
       elements.reportDialog.close();
     }
@@ -2204,93 +1571,50 @@ elements.reportDialog.addEventListener(
 );
 
 
-/* -------------------------------------------------------------------------- */
-/* Autocomplete dismissal                                                     */
-/* -------------------------------------------------------------------------- */
-
-document.addEventListener(
+elements.freePlay.addEventListener(
   "click",
-  event => {
-    if (
-      !elements.suggestions ||
-      elements.suggestions.hidden
-    ) {
-      return;
-    }
-
-    if (
-      elements.suggestions.contains(
-        event.target,
-      ) ||
-      event.target ===
-        elements.input
-    ) {
-      return;
-    }
-
-    hideSuggestions();
+  () => {
+    enterFreePlay();
   },
 );
 
 
-/* -------------------------------------------------------------------------- */
-/* Free Play                                                                  */
-/* -------------------------------------------------------------------------- */
+elements.share.addEventListener(
+  "click",
+  () => {
+    shareResult();
+  },
+);
 
-if (elements.freePlay) {
-  elements.freePlay.addEventListener(
-    "click",
-    async () => {
-      try {
-        const nextPuzzle =
-          selectFreePuzzle();
-
-        if (!nextPuzzle) {
-          return;
-        }
-
-        await startPuzzle(
-          nextPuzzle,
-          "free",
-        );
-      } catch (error) {
-        console.error(
-          "Could not start free play:",
-          error,
-        );
-
-        setMessage(
-          "Couldn't start another game.",
-          true,
-        );
-      }
-    },
-  );
-}
-
-
-/* -------------------------------------------------------------------------- */
-/* Canvas resize                                                              */
-/* -------------------------------------------------------------------------- */
 
 window.addEventListener(
   "resize",
   () => {
-    window.requestAnimationFrame(
-      () =>
-        drawPixelated(
-          finished && won,
-        ),
-    );
+    drawPuzzleImage();
   },
 );
 
 
 /* -------------------------------------------------------------------------- */
-/* Boot                                                                       */
+/* Initialization                                                              */
 /* -------------------------------------------------------------------------- */
 
-statsUI =
-  createStatsUI();
+async function initialize() {
+  try {
+    await loadGames();
 
-loadGame();
+    createStatsUI();
+
+    await loadGame();
+  } catch (error) {
+    console.error(error);
+
+    setMessage(
+      "The game could not load. Try refreshing the page.",
+      "error",
+    );
+  }
+}
+
+
+initialize();

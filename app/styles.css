@@ -852,3 +852,38 @@ dialog::backdrop {
     padding-bottom: 8px;
   }
 }
+
+.game-source-link,
+.result-source-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.game-source-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.game-source-link:hover,
+.result-source-link:hover {
+  text-decoration: underline;
+}
+
+.external-link-icon {
+  width: 0.78em;
+  height: 0.78em;
+  flex: 0 0 auto;
+}
+
+.result-source-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.result-source-link .external-link-icon {
+  width: 0.7em;
+  height: 0.7em;
+}
