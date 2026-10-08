@@ -191,6 +191,10 @@ h1 {
   font-size: 0.9rem;
 }
 
+.image-placeholder[hidden] {
+  display: none;
+}
+
 .status-row {
   display: flex;
   justify-content: space-between;
@@ -375,7 +379,7 @@ h1 {
 
 .guess-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   min-height: 48px;
@@ -402,6 +406,13 @@ h1 {
 .guess-row.correct {
   background: #dcecdf;
   color: #24553f;
+}
+
+.guess-number {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 750;
+  text-align: center;
 }
 
 .guess-name {
@@ -617,6 +628,7 @@ dialog::backdrop {
   background: var(--accent-dark);
 }
 
+
 /* -------------------------------------------------------------------------- */
 /* Statistics                                                                 */
 /* -------------------------------------------------------------------------- */
@@ -831,7 +843,7 @@ dialog::backdrop {
   }
 
   .guess-row {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: 24px minmax(0, 1fr) auto;
     gap: 6px;
     padding: 6px 10px;
   }
