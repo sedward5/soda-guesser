@@ -6,6 +6,7 @@ const GITHUB_ISSUE_URL =
 
 const elements = {
   canvas: document.querySelector("#game-canvas"),
+  imagePlaceholder: document.querySelector("#image-placeholder"),
   form: document.querySelector("#guess-form"),
   input: document.querySelector("#guess-input"),
   button: document.querySelector("#guess-button"),
@@ -724,6 +725,15 @@ function loadImage(url) {
 }
 
 
+function setImagePlaceholderVisible(visible) {
+  if (!elements.imagePlaceholder) {
+    return;
+  }
+
+  elements.imagePlaceholder.hidden = !visible;
+}
+
+
 function calculatePixelSize() {
   if (guesses.length === 0) {
     return 48;
@@ -864,16 +874,34 @@ function renderGuesses() {
 
     row.className = "guess-row";
 
+    const number =
+      document.createElement("span");
+
+    number.className = "guess-number";
+    number.textContent = String(index + 1);
+
     if (index >= guesses.length) {
       row.classList.add("empty");
 
-      row.innerHTML = `
-        <span class="guess-name"></span>
-        <span class="guess-status"></span>
-        <span class="guess-number">${index + 1}</span>
-      `;
+      const name =
+        document.createElement("span");
+
+      name.className = "guess-name";
+
+      const statusElement =
+        document.createElement("span");
+
+      statusElement.className =
+        "guess-status";
+
+      row.append(
+        number,
+        name,
+        statusElement,
+      );
 
       elements.guesses.append(row);
+
       continue;
     }
 
@@ -930,16 +958,10 @@ function renderGuesses() {
       statusDescription,
     );
 
-    const number =
-      document.createElement("span");
-
-    number.className = "guess-number";
-    number.textContent = String(index + 1);
-
     row.append(
+      number,
       name,
       statusElement,
-      number,
     );
 
     elements.guesses.append(row);
@@ -1066,6 +1088,8 @@ async function startPuzzle(nextPuzzle) {
   elements.button.disabled = false;
   elements.input.value = "";
 
+  setImagePlaceholderVisible(true);
+
   hideSuggestions();
 
   renderGuesses();
@@ -1092,6 +1116,8 @@ async function startPuzzle(nextPuzzle) {
   const image = puzzle?.images?.[0];
 
   if (!image) {
+    setImagePlaceholderVisible(false);
+
     setMessage(
       "This puzzle does not have an image yet.",
       "error",
@@ -1106,7 +1132,10 @@ async function startPuzzle(nextPuzzle) {
     );
 
     drawPuzzleImage();
+    setImagePlaceholderVisible(false);
   } catch {
+    setImagePlaceholderVisible(false);
+
     setMessage(
       "The puzzle image could not be loaded.",
       "error",
